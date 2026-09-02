@@ -23,6 +23,6 @@ jobs:
 
       - name: Run push scheduler
         env:
-          FCM_SERVER_KEY: ${{ secrets.FCM_SERVER_KEY }}
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           FCM_DEVICE_TOKEN: ${{ secrets.FCM_DEVICE_TOKEN }}
         run: node cloud/send-push.mjs
