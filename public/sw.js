@@ -3,7 +3,7 @@
    "blank screen after an interrupted cache" case), cache-fallback for offline.
    Registration happens in main.jsx. */
 
-const CACHE = 'planner-shell-v3';
+const CACHE = 'planner-shell-v4';
 
 // Precache entries that must always be available offline.
 const PRECACHE = ['./index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
