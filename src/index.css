@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg: #07070f;
+  --panel: #0e0e1c;
+  --panel2: #13132a;
+  --line: rgba(139, 92, 246, 0.18);
+  --neon: #a78bfa;
+  --neon2: #22d3ee;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(139, 92, 246, 0.16), transparent 55%),
+    radial-gradient(1000px 600px at 100% 0%, rgba(34, 211, 238, 0.12), transparent 55%),
+    var(--bg);
+  color: #e5e7eb;
+  font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass {
+  background: linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.015));
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+}
+
+.neon-ring {
+  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.28), 0 0 24px -6px rgba(167, 139, 250, 0.5);
+}
+
+.tab-active {
+  background: linear-gradient(135deg, rgba(167,139,250,0.22), rgba(34,211,238,0.14));
+  border-color: rgba(167,139,250,0.55);
+  color: #fff;
+  box-shadow: 0 4px 20px -8px rgba(167,139,250,0.7);
+}
+
+.progress-track {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(167,139,250,0.28);
+  overflow: hidden;
+}
+.progress-fill {
+  background: linear-gradient(90deg, #a78bfa, #22d3ee);
+  box-shadow: 0 0 18px rgba(167,139,250,0.8);
+  transition: width 0.4s ease;
+  height: 100%;
+}
+
+/* Pulsing alarm ring */
+@keyframes alarmPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.alarm-pulse { animation: alarmPulse 1s ease-in-out infinite; }
+
+@keyframes neonFlash {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(244,63,94,0.5), 0 0 34px -4px rgba(244,63,94,0.9); }
+  50% { box-shadow: 0 0 0 1px rgba(244,63,94,0.35), 0 0 14px -6px rgba(244,63,94,0.5); }
+}
+.alarm-modal { animation: neonFlash 1.2s ease-in-out infinite; }
+
+/* Custom neon range for volume */
+input[type="range"].neon {
+  accent-color: #a78bfa;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.35); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
