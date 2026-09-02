@@ -4,7 +4,7 @@ import {
   Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
-import { loadEdits, saveEdit, removeEdit, replaceAllEdits } from './firebase/firestore';
+import { loadEdits, saveEdit, removeEdit, replaceAllEdits, publishSchedule } from './firebase/firestore';
 
 const STORE_KEY = 'planner-state-v1';
 const SETTINGS_KEY = 'planner-settings-v1';
@@ -155,6 +155,19 @@ export default function App() {
     );
     Promise.all(jobs).catch(() => {});
   }, [editedJson, editedEntries.length]);
+
+  // Publish the full merged week schedule (defaults + your edits) to Firestore
+  // so the always-on cloud reminder runs on exactly what you see in the app.
+  useEffect(() => {
+    const merged = {};
+    for (const dk of Object.keys(WEEK)) {
+      merged[dk] = (WEEK[dk] || []).map((it) => {
+        const e = edits[it.id] || {};
+        return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
+      });
+    }
+    publishSchedule(merged).catch(() => {});
+  }, [editedJson]);
 
   useEffect(() => { const id = setInterval(() => setNow(nowTime()), 1000); return () => clearInterval(id); }, []);
 

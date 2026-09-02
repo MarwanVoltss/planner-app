@@ -73,4 +73,16 @@ export async function replaceAllEdits(edits) {
   }
 }
 
+// Publish the full merged schedule (schedule.js defaults + your edits) so the
+// always-on cloud reminder reads exactly what you see in the app.
+// `merged` = { dayKey: [{ id, title, start, end }] }.
+export async function publishSchedule(merged) {
+  try {
+    await setDoc(doc(db, 'planner-schedule', 'index'), { all: merged });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 export { db };
