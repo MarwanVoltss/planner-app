@@ -30,44 +30,40 @@ body {
 }
 
 .neon-ring {
-  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.28), 0 0 24px -6px rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 0 1px var(--neon), 0 0 24px -6px var(--neon);
 }
 
 .tab-active {
-  background: linear-gradient(135deg, rgba(167,139,250,0.22), rgba(34,211,238,0.14));
-  border-color: rgba(167,139,250,0.55);
+  background: linear-gradient(135deg, var(--neon), var(--neon2));
+  border-color: var(--neon);
   color: #fff;
-  box-shadow: 0 4px 20px -8px rgba(167,139,250,0.7);
+  box-shadow: 0 4px 20px -8px var(--neon);
 }
 
 .progress-track {
   background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(167,139,250,0.28);
+  border: 1px solid var(--neon);
   overflow: hidden;
 }
 .progress-fill {
-  background: linear-gradient(90deg, #a78bfa, #22d3ee);
-  box-shadow: 0 0 18px rgba(167,139,250,0.8);
+  background: linear-gradient(90deg, var(--neon), var(--neon2));
+  box-shadow: 0 0 18px var(--neon);
   transition: width 0.4s ease;
   height: 100%;
 }
 
-/* Pulsing alarm ring */
-@keyframes alarmPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+.span-check {
+  box-shadow: 0 0 12px -2px rgba(52, 211, 153, 0.8);
 }
-.alarm-pulse { animation: alarmPulse 1s ease-in-out infinite; }
 
-@keyframes neonFlash {
-  0%, 100% { box-shadow: 0 0 0 1px rgba(244,63,94,0.5), 0 0 34px -4px rgba(244,63,94,0.9); }
-  50% { box-shadow: 0 0 0 1px rgba(244,63,94,0.35), 0 0 14px -6px rgba(244,63,94,0.5); }
+/* Subtle ring for the task that is happening right now */
+.now-ring {
+  transition: box-shadow 0.2s ease;
 }
-.alarm-modal { animation: neonFlash 1.2s ease-in-out infinite; }
 
 /* Custom neon range for volume */
 input[type="range"].neon {
-  accent-color: #a78bfa;
+  accent-color: var(--neon);
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
