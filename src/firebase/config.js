@@ -14,4 +14,4 @@ export const FIREBASE_CONFIG = {
 };
 
 // VAPID key (public, safe to commit) — used on the client to subscribe to push.
-export const VAPID_KEY = 'YOUR_VAPID_KEY';
+export const VAPID_KEY = 'BF16BB_Ye-3gISg6IGtiJrWmJtdPt9OTa9AmSGGZdhqiuG7EajKMHtvtbgl-JD7BNqkM0pt2QljsSe2Q71-KMPk';
