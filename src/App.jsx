@@ -4,6 +4,7 @@ import {
   Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
+import { loadEdits, saveEdit, removeEdit, replaceAllEdits } from './firebase/firestore';
 
 const STORE_KEY = 'planner-state-v1';
 const SETTINGS_KEY = 'planner-settings-v1';
@@ -131,6 +132,30 @@ export default function App() {
     localStorage.setItem(STORE_KEY, JSON.stringify({ checks, edits }));
   }, [checks, edits]);
   useEffect(() => { persist(); }, [persist]);
+
+  // Load any server-side edits (shared with the Telegram bot) once.
+  useEffect(() => {
+    let alive = true;
+    loadEdits().then((remote) => {
+      if (!alive) return;
+      const merged = { ...(loadState()?.edits || {}), ...remote };
+      setEdits(merged);
+      localStorage.setItem(STORE_KEY, JSON.stringify({ checks: loadState()?.checks || {}, edits: merged }));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Push edits to Firestore so the bot sends at your customized times.
+  const editedEntries = Object.keys(edits);
+  const editedJson = JSON.stringify(edits);
+  useEffect(() => {
+    const payload = JSON.parse(editedJson);
+    const jobs = Object.entries(payload).map(([id, e]) =>
+      e && (e.title || e.start || e.end) ? saveEdit(id, e) : removeEdit(id)
+    );
+    Promise.all(jobs).catch(() => {});
+  }, [editedJson, editedEntries.length]);
+
   useEffect(() => { const id = setInterval(() => setNow(nowTime()), 1000); return () => clearInterval(id); }, []);
 
   const saveSettings = useCallback((patch) => {
@@ -162,7 +187,7 @@ export default function App() {
     setChecks((c) => ({ ...c, ...d }));
     setEdits({});
   }
-  function resetAll() { setChecks({}); setEdits({}); }
+  function resetAll() { setChecks({}); setEdits({}); replaceAllEdits({}).catch(() => {}); }
 
   const helloIdx = () => {
     const h = new Date().getHours();
