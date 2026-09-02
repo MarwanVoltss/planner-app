@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
 import { subscribe, startAlarm, stopAlarm, isRinging, requestPermission, armAudio, setVolume } from './lib/alarm';
-import { subscribeFirebasePush, onFirebaseMessage } from './firebase/messaging';
+import { subscribeFirebasePush, onFirebaseMessage, getLastPushError } from './firebase/messaging';
 import { FIREBASE_CONFIG } from './firebase/config';
 
 const STORE_KEY = 'planner-state-v1';
@@ -123,6 +123,7 @@ export default function App() {
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
   const [pushToken, setPushToken] = useState(() => localStorage.getItem('fcm-token') || '');
+  const [pushError, setPushError] = useState('');
   const [now, setNow] = useState(nowTime());
   const [previewTime, setPreviewTime] = useState('07:30'); // for demo/test alarm
   const [greeting, setGreeting] = useState(greet());
@@ -258,6 +259,7 @@ export default function App() {
           {!unconfigured && (
             <button
               onClick={async () => {
+                setPushError('');
                 const ok = await requestPermission();
                 if (ok) setNotifPerm('granted');
                 armAudio();
@@ -265,12 +267,17 @@ export default function App() {
                 if (tok) {
                   localStorage.setItem('fcm-token', tok);
                   setPushToken(tok);
+                } else {
+                  setPushError(getLastPushError() || 'تعذر الحصول على رمز الإشعار');
                 }
               }}
               className="shrink-0 text-[12px] px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 cursor-pointer transition-colors"
             >
               تفعيل
             </button>
+          )}
+          {pushError && (
+            <p className="text-[11px] text-rose-400 mt-2 w-full" dir="ltr">push-err: {pushError}</p>
           )}
         </div>
       )}

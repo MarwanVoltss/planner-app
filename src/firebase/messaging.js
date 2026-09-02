@@ -19,18 +19,28 @@ function ensure() {
 
 // Ask the browser for notification permission and a push token.
 // Returns the device token, or null if not available.
+let lastError = '';
+export function getLastPushError() { return lastError; }
+
 export async function subscribeFirebasePush() {
   const ok = ensure();
-  if (!ok) return null;
+  if (!ok) { lastError = 'firebase-not-configured'; return null; }
   try {
-    const perm = Notification && Notification.requestPermission();
-    if ((await perm) !== 'granted') return null;
+    if (typeof Notification === 'undefined' || !('serviceWorker' in navigator)) {
+      lastError = 'browser-unsupported';
+      return null;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { lastError = 'permission-denied'; return null; }
+    lastError = '';
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: await navigator.serviceWorker.ready,
     });
-    return token || null;
+    if (!token) { lastError = 'no-token'; return null; }
+    return token;
   } catch (e) {
+    lastError = String((e && e.message) || e);
     console.error('Firebase token error', e);
     return null;
   }
