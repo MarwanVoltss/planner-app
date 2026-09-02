@@ -6,6 +6,7 @@ import {
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
 import { subscribe, startAlarm, stopAlarm, isRinging, requestPermission, armAudio, setVolume } from './lib/alarm';
 import { subscribeFirebasePush, onFirebaseMessage } from './firebase/messaging';
+import { FIREBASE_CONFIG } from './firebase/config';
 
 const STORE_KEY = 'planner-state-v1';
 
@@ -155,6 +156,9 @@ export default function App() {
   const active = useAlarmScheduler({ checks, edits });
   const showAlarm = !!active;
   const activeItem = active ? active.item : null;
+  const unconfigured =
+    FIREBASE_CONFIG.apiKey.indexOf('YOUR_') === 0 ||
+    !FIREBASE_CONFIG.apiKey;
 
   // Foreground push: when a task-start push arrives while the app is open,
   // surface a notification too (the cron also fires an alert when closed).
@@ -246,22 +250,28 @@ export default function App() {
       {!pushToken && notifPerm !== 'unsupported' && (
         <div className="glass rounded-2xl p-3 mb-4 flex items-center gap-3 border-amber-400/30">
           <Bell size={16} className="text-amber-300" />
-          <p className="text-[12px] text-gray-300 flex-1">فعّل إشعارات المنبه — بالـ push هيوصلك حتى لو الموقع مقفول.</p>
-          <button
-            onClick={async () => {
-              const ok = await requestPermission();
-              if (ok) setNotifPerm('granted');
-              armAudio();
-              const tok = await subscribeFirebasePush();
-              if (tok) {
-                localStorage.setItem('fcm-token', tok);
-                setPushToken(tok);
-              }
-            }}
-            className="shrink-0 text-[12px] px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 cursor-pointer transition-colors"
-          >
-            تفعيل
-          </button>
+          {unconfigured ? (
+            <p className="text-[12px] text-gray-300 flex-1">إشعارات المنبه جاهزة في الكود، بس محتاجة نضبط حساب Firebase. كلم Marwan يعمل الخطوات في README.</p>
+          ) : (
+            <p className="text-[12px] text-gray-300 flex-1">فعّل إشعارات المنبه — بالـ push هيوصلك حتى لو الموقع مقفول.</p>
+          )}
+          {!unconfigured && (
+            <button
+              onClick={async () => {
+                const ok = await requestPermission();
+                if (ok) setNotifPerm('granted');
+                armAudio();
+                const tok = await subscribeFirebasePush();
+                if (tok) {
+                  localStorage.setItem('fcm-token', tok);
+                  setPushToken(tok);
+                }
+              }}
+              className="shrink-0 text-[12px] px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 cursor-pointer transition-colors"
+            >
+              تفعيل
+            </button>
+          )}
         </div>
       )}
       {pushToken && notifPerm === 'granted' && (
