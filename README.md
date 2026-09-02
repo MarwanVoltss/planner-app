@@ -1,28 +1,23 @@
 # المخطط الأسبوعي — Weekly Study Planner PWA
 
-تطبيق جدول أسبوعي للطالب: شيتشكليست بتقدم حي، تعديل المواعيد، منبه صوتي + إشعارات، وPWA للهاتف. عربي RTL، بـReact 19 + Vite + Tailwind.
+تطبيق جدول أسبوعي للطالب: شيتشكليست بتقدم حي، تعديل المواعيد، تخصيص الوجه (الثيم)، عربي/إنجليزي، وPWA للهاتف. عربي RTL، بـ React 19 + Vite + Tailwind.
 
 مباشرة: **https://marwanvoltss.github.io/planner-app/**
 
-## اللي محتاج تعمله مرة واحدة عشان push notifications تشتغل
+## الـ site فصل تمامًا عن المنبه
+الـ site بقى **صامت** (من غير أجراس ولا إشعارات داخل المتصفح). التذكير الوحيد هوا **بوت تيليجرام** اللي بيبعت رسالة لموبايلك وقت بداية كل مهمة — وبيشتغل حتى والموقع مقفول أو المتصفح مقفول، لأنو بيشتغل على خوادم GitHub كل دقيقة.
 
-المنبه الحالي بيشتغل من المتصفح (لازم الموقع مفتوح). علشان المنبه يوصلك **حتى والموقع مقفول** — محتاج تعبّي 3 قيم:
+## إعداد بوت التليجرام (خطوتك الوحيدة)
+1. افتح تيليجرام وابحث عن **@BotFather** → ابعت `/newbot` → اسم + username ينتهي بـ `bot` → هيبعتلك **Token**.
+2. افتح محادثة مع بوتك وابعت أي حرف، ثم افتح `https://api.telegram.org/bot<Token>/getUpdates` → خُذ رقم **chat → id**.
+3. من صفحة الريبو: **Settings → Secrets and variables → Actions → New repository secret**:
+   - `TELEGRAM_BOT_TOKEN`: التوكن من BotFather.
+   - `TELEGRAM_CHAT_ID`: رقم الـ chat (لو أكثر من جهاز حطهم مفصولين بفاصلة؟ — تيليجرام بوت رسالته بيوصل لكل اللي فتحوه؛ غيير مثقافش هنا).
+4. جريان `telegram-alarm` بيبعت رسالة وقت بداية كل مهمة، والاختبار اللي بيعمل رسالة تجريبية فورًا: من **Actions → telegram-alarm → Run workflow**.
 
-### 1) تعبئة الـ config في `src/firebase/config.js`
-1. افتح https://console.firebase.google.com واعمل **Add project** (قفل Google Analytics).
-2. من **Project settings ⚙️ → General → Your apps → `</>` Web**.
-3. سجّل باسم `planner` وخُذ نسخة `firebaseConfig` ولصّق القيم في `src/firebase/config.js`.
-4. من **Project settings → Cloud Messaging** انسخ **Key pair** وحطّه في `VAPID_KEY`.
-
-### 2) تسجيل المفتاح السري في GitHub
-من صفحة الريبو: **Settings → Secrets and variables → Actions → New repository secret**:
-- `FCM_SERVER_KEY`: من **Firebase → Project settings → Cloud Messaging → "Cloud Messaging API (Legacy) server key"**.
-- `FCM_DEVICE_TOKEN`: هتجيبه بعد ما تطبّق الصفحة وتدوس **تفعيل**، هيظهر زرار **نسخ الرمز** — انسخه ولصّقه هنا (لو أكثر من جهاز حطهم مفصولين بفاصلة).
-
-### 3) تشغيل المنبه
-- افتح الموقع وارجع للدورة الأولى ودوس **تفعيل** عند شريط الإشعارات.
-- بعد الحفظ، ارفع التعديلات `git push` (هتتشغل على GitHub Pages تلقائيًا).
-- الـ cron يشتغل كل دقيقة ويبعت push وقت بداية كل مهمة — حتى والموقع مقفول.
+## ميزات الواجهة
+- **الوجه (الثيم):** زرار 🎨 في الهيدر → اختار لون (بنفسجي/سماوي/وردي/زمردي/كهرماني).
+- **اللغة:** عربي 🔁 English → تتبدل كل نصوص الواجهة والاتجاه RTL/LTR. الحفظ تلقائي في المتصفح.
 
 ## التطوير محليًا
 ```bash
@@ -32,5 +27,5 @@ npm run preview  # اختبار build جاهز (4173)
 npm run build
 ```
 
-## الـ workflow (push-alarm)
-`.github/workflows/push-alarm.yml` يشغّل `cloud/send-push.mjs` كل دقيقة؛ بيقرأ نفس `src/lib/schedule.js` ويبعت push بأوقات المهام (بتوقيت القاهرة).
+## الـ workflow (telegram-alarm)
+`.github/workflows/telegram-alarm.yml` يشغّل `cloud/send-telegram.mjs` كل دقيقة؛ بيقرأ نفس `src/lib/schedule.js` وبيبعت رسالة تيليجرام بمهام الوقت الحالي (بتوقيت القاهرة).
