@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
 import { subscribe, startAlarm, stopAlarm, isRinging, requestPermission, armAudio, setVolume } from './lib/alarm';
+import { subscribeFirebasePush, onFirebaseMessage } from './firebase/messaging';
 
 const STORE_KEY = 'planner-state-v1';
 
@@ -120,6 +121,7 @@ export default function App() {
   const [notifPerm, setNotifPerm] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
+  const [pushToken, setPushToken] = useState(() => localStorage.getItem('fcm-token') || '');
   const [now, setNow] = useState(nowTime());
   const [previewTime, setPreviewTime] = useState('07:30'); // for demo/test alarm
   const [greeting, setGreeting] = useState(greet());
@@ -153,6 +155,19 @@ export default function App() {
   const active = useAlarmScheduler({ checks, edits });
   const showAlarm = !!active;
   const activeItem = active ? active.item : null;
+
+  // Foreground push: when a task-start push arrives while the app is open,
+  // surface a notification too (the cron also fires an alert when closed).
+  useEffect(() => {
+    if (!pushToken) return;
+    const unsub = onFirebaseMessage((payload) => {
+      const { title, body } = payload.notification || {};
+      if (title && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try { new Notification(title, { body }); } catch (e) {}
+      }
+    });
+    return () => { unsub.then((fn) => fn && fn()); };
+  }, [pushToken]);
 
   const perItem = useMemo(() => {
     const source = WEEK[day] || [];
@@ -227,16 +242,47 @@ export default function App() {
         </div>
       </header>
 
-      {/* Notifications permissions banner */}
-      {notifPerm !== 'granted' && notifPerm !== 'unsupported' && (
+      {/* Push notifications banner */}
+      {!pushToken && notifPerm !== 'unsupported' && (
         <div className="glass rounded-2xl p-3 mb-4 flex items-center gap-3 border-amber-400/30">
           <Bell size={16} className="text-amber-300" />
-          <p className="text-[12px] text-gray-300 flex-1">فعّل الإشعارات ليوصلك تنبيه المنبه حتى لو التبويب مقفول في الخلفية.</p>
+          <p className="text-[12px] text-gray-300 flex-1">فعّل إشعارات المنبه — بالـ push هيوصلك حتى لو الموقع مقفول.</p>
           <button
-            onClick={async () => { const ok = await requestPermission(); if (ok) setNotifPerm('granted'); armAudio(); }}
+            onClick={async () => {
+              const ok = await requestPermission();
+              if (ok) setNotifPerm('granted');
+              armAudio();
+              const tok = await subscribeFirebasePush();
+              if (tok) {
+                localStorage.setItem('fcm-token', tok);
+                setPushToken(tok);
+              }
+            }}
             className="shrink-0 text-[12px] px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 hover:bg-amber-500/30 cursor-pointer transition-colors"
           >
             تفعيل
+          </button>
+        </div>
+      )}
+      {pushToken && notifPerm === 'granted' && (
+        <div className="glass rounded-2xl px-3 py-2 mb-4 flex items-center gap-2 border-emerald-400/30">
+          <BellRing size={14} className="text-emerald-300" />
+          <span className="text-[12px] text-emerald-200 flex-1">إشعارات المنبه مفعّلة — هيوصلك حتى لو الموقع مقفول.</span>
+          <button
+            onClick={async (e) => {
+              try { await navigator.clipboard.writeText(pushToken); } catch (err) {}
+              document.getElementById('copy-tok-msg')?.remove();
+              const m = document.createElement('span');
+              m.id = 'copy-tok-msg';
+              m.textContent = 'تم النسخ ✓';
+              m.className = 'text-[10px] text-emerald-400';
+              e.currentTarget.parentElement.appendChild(m);
+              setTimeout(() => m.remove(), 1500);
+            }}
+            title="انسخ رمز الجهاز لتفعيل push من الخادم"
+            className="shrink-0 text-[11px] px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 hover:bg-emerald-500/20 cursor-pointer transition-colors"
+          >
+            نسخ الرمز
           </button>
         </div>
       )}

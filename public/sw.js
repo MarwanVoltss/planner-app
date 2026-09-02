@@ -103,3 +103,32 @@ self.addEventListener('message', (e) => {
     if (hmm === '00:00') fired = {};
   }, 1000);
 });
+
+// ---- Firebase push notifications (delivered even when the site is closed) ----
+// The GitHub Actions cron (cloud/send-push.mjs) sends these. Show them as a
+// Notification, and when clicked, focus/open the planner.
+self.addEventListener('push', (e) => {
+  let data = {};
+  try {
+    data = (e.data && e.data.json()) || {};
+  } catch (err) {}
+  const n = data.notification || data.data || {};
+  const title = n.title || 'تذكير المخطط الأسبوعي';
+  const body = n.body || '';
+  const options = {
+    body,
+    tag: 'planner-push-' + (n.tag || Date.now()),
+    requireInteraction: true,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Open the planner when the user clicks the notification.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL('./', self.location.origin).href;
+  let focus = () => clients.openWindow(url);
+  e.waitUntil(focus());
+});
