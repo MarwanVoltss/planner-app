@@ -52,11 +52,6 @@ const items = WEEK[key] || [];
 const due = items.filter((it) => it.start === cairoNow);
 const dayName = (DAYS.find((d) => d.key === key) || {}).label || key;
 
-if (due.length === 0) {
-  console.log(`No task at ${cairoNow} (${dayName}).`);
-  process.exit(0);
-}
-
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const chatId = process.env.TELEGRAM_CHAT_ID;
 if (!botToken) { console.error('SKIP: TELEGRAM_BOT_TOKEN secret not set'); process.exit(0); }
@@ -66,6 +61,11 @@ if (!chatId) { console.error('SKIP: TELEGRAM_CHAT_ID secret not set'); process.e
 // to send a test message immediately, independent of the schedule minute.
 if (process.env.TELEGRAM_TEST === '1') {
   await sendTelegram(botToken, chatId, '<b>✅ اختبار بوت المخطط</b>\nالبوت شغال — هيوصلوك رسائل المواعيد من دلوقتي. 🎉');
+  process.exit(0);
+}
+
+if (due.length === 0) {
+  console.log(`No task at ${cairoNow} (${dayName}).`);
   process.exit(0);
 }
 
