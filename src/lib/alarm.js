@@ -21,6 +21,7 @@ function ensureCtx() {
 // Two detuned oscillators with a tremolo LFO = classic persistent alarm tone.
 export function startAlarm(item) {
   const c = ensureCtx();
+  if (c && c.state === 'suspended') c.resume(); // try to unlock if possible
   const repeatKey = `${item.day}|${item.id}|${item.start}`;
   if (activeAlarm && activeAlarm.repeatKey === repeatKey) return activeAlarm;
   master = c.createGain();
@@ -108,4 +109,32 @@ export async function requestPermission() {
 }
 
 // ---- Web Audio API may only start after a user gesture. Provide a one-time arm ----
-export function armAudio() { ensureCtx(); }
+export function armAudio() {
+  const c = ensureCtx();
+  if (c && c.state === 'suspended') c.resume();
+}
+
+// Browsers block audio until the FIRST user gesture (click/touch/key). Call this
+// once on mount so that after the user touches/scrolls anything, background alarms
+// created later are able to produce sound (context unlocked).
+let unlocked = false;
+export function enableAudioOnFirstGesture() {
+  if (unlocked) return;
+  unlocked = true;
+  const unlock = () => {
+    const c = ensureCtx();
+    if (c && c.state === 'suspended') c.resume();
+  };
+  const once = (e) => {
+    unlock();
+    remove();
+  };
+  const remove = () => {
+    window.removeEventListener('pointerdown', once);
+    window.removeEventListener('keydown', once);
+    window.removeEventListener('touchstart', once);
+  };
+  window.addEventListener('pointerdown', once);
+  window.addEventListener('keydown', once);
+  window.addEventListener('touchstart', once);
+}

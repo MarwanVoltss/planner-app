@@ -4,7 +4,7 @@ import {
   Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
-import { subscribe, startAlarm, stopAlarm, isRinging, requestPermission, armAudio, setVolume } from './lib/alarm';
+import { subscribe, startAlarm, stopAlarm, isRinging, requestPermission, armAudio, setVolume, enableAudioOnFirstGesture } from './lib/alarm';
 import { subscribeFirebasePush, onFirebaseMessage, getLastPushError } from './firebase/messaging';
 import { FIREBASE_CONFIG } from './firebase/config';
 
@@ -160,6 +160,9 @@ export default function App() {
   const unconfigured =
     FIREBASE_CONFIG.apiKey.indexOf('YOUR_') === 0 ||
     !FIREBASE_CONFIG.apiKey;
+
+  // Unlock audio on first user gesture so the in-page siren has sound.
+  useEffect(() => { enableAudioOnFirstGesture(); }, []);
 
   // Foreground push: when a task-start push arrives while the app is open,
   // surface a notification too (the cron also fires an alert when closed).
