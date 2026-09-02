@@ -6,3 +6,8 @@ dist
 functions/node_modules/
 functions/.firebase/
 
+
+# Cloudflare
+cloudflare/node_modules/
+cloudflare/.wrangler/
+

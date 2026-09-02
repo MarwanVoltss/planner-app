@@ -1,0 +1,15 @@
+name = "planner-reminder"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Run every minute, forever, on the free plan.
+[triggers]
+crons = ["* * * * *"]
+
+# Secrets are set via `wrangler secret put` (not committed here):
+#   wrangler secret put TELEGRAM_BOT_TOKEN
+#   wrangler secret put TELEGRAM_CHAT_ID
+#   wrangler secret put FIREBASE_PROJECT_ID
+
+[vars]
+FIREBASE_PROJECT_ID = "gen-lang-client-0675890724"
