@@ -112,6 +112,7 @@ export default function App() {
   const [checks, setChecks] = useState(() => loadState()?.checks || {});
   const [edits, setEdits] = useState(() => loadState()?.edits || {});
   const [extras, setExtras] = useState(() => loadState()?.extras || {});
+  const [deletes, setDeletes] = useState(() => loadState()?.deletes || {});
   const [now, setNow] = useState(nowTime());
   const settings = loadSettings();
   const [lang, setLang] = useState(settings.lang || 'ar');
@@ -130,8 +131,8 @@ export default function App() {
   }, [theme, lang]);
 
   const persist = useCallback(() => {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ checks, edits, extras }));
-  }, [checks, edits, extras]);
+    localStorage.setItem(STORE_KEY, JSON.stringify({ checks, edits, extras, deletes }));
+  }, [checks, edits, extras, deletes]);
   useEffect(() => { persist(); }, [persist]);
 
   // Load any server-side edits (shared with the Telegram bot) once.
@@ -141,7 +142,7 @@ export default function App() {
       if (!alive) return;
       const merged = { ...(loadState()?.edits || {}), ...remote };
       setEdits(merged);
-      localStorage.setItem(STORE_KEY, JSON.stringify({ checks: loadState()?.checks || {}, edits: merged, extras: loadState()?.extras || {} }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ checks: loadState()?.checks || {}, edits: merged, extras: loadState()?.extras || {}, deletes: loadState()?.deletes || {} }));
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -160,13 +161,16 @@ export default function App() {
   // Publish the full merged week schedule (defaults + edits + extras) to Firestore
   // so the always-on cloud reminder runs on exactly what you see in the app.
   const extrasJson = JSON.stringify(extras);
+  const deletesJson = JSON.stringify(deletes);
   useEffect(() => {
     const merged = {};
     for (const dk of Object.keys(WEEK)) {
-      merged[dk] = (WEEK[dk] || []).map((it) => {
-        const e = edits[it.id] || {};
-        return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
-      });
+      merged[dk] = (WEEK[dk] || [])
+        .filter((it) => !deletes[it.id])
+        .map((it) => {
+          const e = edits[it.id] || {};
+          return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
+        });
     }
     // Append any user-added tasks for each day.
     for (const dk of Object.keys(extras || {})) {
@@ -177,7 +181,7 @@ export default function App() {
       }
     }
     publishSchedule(merged).catch(() => {});
-  }, [editedJson, extrasJson]);
+  }, [editedJson, extrasJson, deletesJson]);
 
   // Publish the done-state (checks) to Firestore keyed by today's date so the
   // bot can see how many tasks remain today and celebrate when you finish one.
@@ -200,16 +204,18 @@ export default function App() {
 
   const perItem = useMemo(() => {
     const source = WEEK[day] || [];
-    const base = source.map((it) => {
-      const e = edits[it.id] || {};
-      return { ...it, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
-    });
+    const base = source
+      .filter((it) => !deletes[it.id])
+      .map((it) => {
+        const e = edits[it.id] || {};
+        return { ...it, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
+      });
     const extra = (extras[day] || []).map((x) => {
       const e = edits[x.id] || {};
       return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end };
     });
     return [...base, ...extra];
-  }, [day, edits, extras]);
+  }, [day, edits, extras, deletes]);
 
   const doneCount = perItem.filter((it) => checks[it.id]).length;
   const total = perItem.length;
@@ -226,13 +232,18 @@ export default function App() {
       return { ...ex, [day]: [...list, { id, title: '', start: now, end: null, tag: 'rest' }] };
     });
   }
-  // Remove a custom task entirely.
+  // Remove a task (custom extras or a base default task, either way it's hidden + unpublished).
   function removeTask(id) {
-    setExtras((ex) => {
-      const next = { ...ex };
-      Object.keys(next).forEach((dk) => { next[dk] = next[dk].filter((x) => x.id !== id); });
-      return next;
-    });
+    const isExtra = (extras[day] || []).some((x) => x.id === id);
+    if (isExtra) {
+      setExtras((ex) => {
+        const next = { ...ex };
+        Object.keys(next).forEach((dk) => { next[dk] = next[dk].filter((x) => x.id !== id); });
+        return next;
+      });
+    } else {
+      setDeletes((d) => ({ ...d, [id]: true }));
+    }
     setEdits((e) => { const n = { ...e }; delete n[id]; return n; });
     setChecks((c) => { const n = { ...c }; delete n[id]; return n; });
   }
@@ -243,7 +254,7 @@ export default function App() {
     setChecks((c) => ({ ...c, ...d }));
     setEdits({});
   }
-  function resetAll() { setChecks({}); setEdits({}); replaceAllEdits({}).catch(() => {}); }
+  function resetAll() { setChecks({}); setEdits({}); setDeletes({}); replaceAllEdits({}).catch(() => {}); }
 
   const helloIdx = () => {
     const h = new Date().getHours();
@@ -412,7 +423,6 @@ export default function App() {
               onChangeEnd={(v) => updateItem(it.id, { end: v })}
               onToggle={() => toggleCheck(it.id)}
               showEdit={!done}
-              isExtra={!!(extras[day] || []).find((x) => x.id === it.id)}
               onRemove={() => removeTask(it.id)}
             />
           );
@@ -442,7 +452,7 @@ const TAG_ICON = {
   sleep: Moon,
 };
 
-function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onToggle, showEdit, isExtra, onRemove }) {
+function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onToggle, showEdit, onRemove }) {
   const [open, setOpen] = useState(false);
   const tagLabel = TAGS[it.tag]?.label || '';
   return (
@@ -533,14 +543,12 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
             />
           </div>
           <button onClick={() => setOpen(false)} className="col-span-2 mt-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all">{t.saveEdit}</button>
-          {isExtra && (
-            <button
-              onClick={() => { setOpen(false); onRemove(); }}
-              className="col-span-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-400/30 text-red-300 font-semibold text-[12px] cursor-pointer transition-all"
-            >
-              {lang === 'en' ? 'Delete task' : 'حذف المهمة'}
-            </button>
-          )}
+          <button
+            onClick={() => { setOpen(false); onRemove(); }}
+            className="col-span-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-400/30 text-red-300 font-semibold text-[12px] cursor-pointer transition-all"
+          >
+            {lang === 'en' ? 'Delete task' : 'حذف المهمة'}
+          </button>
         </div>
       )}
     </div>
