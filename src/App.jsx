@@ -226,7 +226,12 @@ const jobs = Object.entries(payload).map(([id, e]) =>
       const e = edits[x.id] || {};
       return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end, tag: e.tag || x.tag };
     });
-    return [...base, ...extra].sort((a, b) => (a.start || '99:99').localeCompare(b.start || '99:99'));
+    const byTime = (a, b) => {
+      const [ah, am] = ((a.start || '99:99').split(':').map((n) => Number(n) || 0));
+      const [bh, bm] = ((b.start || '99:99').split(':').map((n) => Number(n) || 0));
+      return ah !== bh ? ah - bh : am - bm;
+    };
+    return [...base, ...extra].sort(byTime);
   }, [day, edits, extras, deletes]);
 
   const doneCount = perItem.filter((it) => checks[it.id]).length;
@@ -455,17 +460,9 @@ const jobs = Object.entries(payload).map(([id, e]) =>
             placeholder={t.addTitle}
             className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
           />
-          <label className="text-[11px] text-gray-400">{t.addType}</label>
-          <select
-            value={formTag}
-            onChange={(e) => setFormTag(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
-          >
-            {Object.entries(TAGS).map(([key, tag]) => (
-              <option key={key} value={key}>{tag.label}</option>
-            ))}
-          </select>
-          <label className="text-[11px] text-gray-400">{t.start}</label>
+          <label className="text-[11px] text-gray-400 mb-1 block">{t.addType}</label>
+          <TagGrid value={formTag} onSelect={setFormTag} />
+          <label className="text-[11px] text-gray-400 mt-2">{t.start}</label>
           <input
             type="time"
             value={formStart}
@@ -513,6 +510,42 @@ const TAG_ICON = {
   dev: Code2,
   sleep: Moon,
 };
+
+// Display order for the type picker: the everyday activity types first.
+const TAG_ORDER = ['work', 'study', 'rest', 'gym', 'dev', 'prayer', 'meal', 'read', 'sleep', 'wake', 'store'];
+
+function TagGrid({ value, onSelect, withLabel }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {TAG_ORDER.map((key) => {
+        const tag = TAGS[key];
+        if (!tag) return null;
+        const Icon = TAG_ICON[key] || Clock;
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onSelect(key)}
+            title={tag.label}
+            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-all cursor-pointer ${
+              active ? 'scale-[1.06]' : 'opacity-60'
+            }`}
+            style={{
+              background: `${tag.c}${active ? '2e' : '12'}`,
+              border: `1px solid ${tag.c}${active ? '' : '55'}`,
+              color: tag.c,
+              boxShadow: active ? `0 0 10px -3px ${tag.c}` : 'none',
+            }}
+          >
+            <Icon size={12} style={{ color: tag.c }} />
+            <span>{tag.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onChangeTag, onToggle, showEdit, onRemove }) {
   const [open, setOpen] = useState(false);
@@ -607,16 +640,10 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
               onChange={(e) => onChangeEnd(e.target.value || null)}
             />
           </div>
-          <label className="text-[11px] text-gray-400 col-span-2 -mb-1">{t.addType}</label>
-          <select
-            className="col-span-2 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/50 focus:outline-none"
-            value={it.tag}
-            onChange={(e) => onChangeTag(e.target.value)}
-          >
-            {Object.entries(TAGS).map(([key, tag]) => (
-              <option key={key} value={key}>{tag.label}</option>
-            ))}
-          </select>
+          <label className="text-[11px] text-gray-400 col-span-2 -mb-0.5">{t.addType}</label>
+          <div className="col-span-2">
+            <TagGrid value={it.tag} onSelect={onChangeTag} />
+          </div>
           <button onClick={() => setOpen(false)} className="col-span-2 mt-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all">{t.saveEdit}</button>
           <button
             onClick={() => { setOpen(false); onRemove(); }}
