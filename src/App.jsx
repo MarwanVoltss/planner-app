@@ -521,13 +521,21 @@ const TAG_ORDER = ['work', 'study', 'rest', 'gym', 'dev', 'prayer', 'meal', 'rea
 
 function TagPicker({ value, onSelect }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
   const current = TAGS[value] || TAGS.rest;
   const Icon = TAG_ICON[value] || Coffee;
   return (
-    <div className="relative">
+    <div ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer"
         style={{
           background: `linear-gradient(135deg, ${current.c}2e, ${current.c}12)`,
@@ -545,15 +553,14 @@ function TagPicker({ value, onSelect }) {
 
       {open && (
         <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute z-20 mt-1.5 w-full rounded-2xl overflow-hidden backdrop-blur-xl"
+          className="mt-1.5 rounded-xl p-1"
           style={{
-            background: 'rgba(20,16,38,0.85)',
-            border: '1px solid rgba(167,139,250,0.35)',
-            boxShadow: '0 0 26px -6px rgba(167,139,250,0.55), 0 18px 40px -12px rgba(0,0,0,0.6)',
+            background: 'rgba(24,18,44,0.9)',
+            border: '1px solid rgba(167,139,250,0.3)',
+            boxShadow: '0 0 22px -6px rgba(167,139,250,0.4)',
           }}
         >
-          <div className="max-h-56 overflow-y-auto no-scrollbar">
+          <div className="flex flex-wrap gap-1.5">
             {TAG_ORDER.map((key) => {
               const tag = TAGS[key];
               if (!tag) return null;
@@ -564,19 +571,18 @@ function TagPicker({ value, onSelect }) {
                   key={key}
                   type="button"
                   onClick={() => { onSelect(key); setOpen(false); }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-right transition-colors cursor-pointer ${
-                    active ? 'bg-white/10' : 'hover:bg-white/5'
+                  className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-full transition-all cursor-pointer ${
+                    active ? 'scale-[1.05]' : 'opacity-70'
                   }`}
-                  style={{ color: active ? '#fff' : 'rgba(255,255,255,0.75)' }}
+                  style={{
+                    background: `${tag.c}${active ? '2b' : '14'}`,
+                    border: `1px solid ${tag.c}${active ? '' : '55'}`,
+                    color: tag.c,
+                    boxShadow: active ? `0 0 9px -3px ${tag.c}` : 'none',
+                  }}
                 >
-                  <span
-                    className="grid place-items-center w-7 h-7 rounded-lg"
-                    style={{ background: `${tag.c}22`, border: `1px solid ${tag.c}55`, boxShadow: active ? `0 0 8px -2px ${tag.c}` : 'none' }}
-                  >
-                    <I size={14} style={{ color: tag.c }} />
-                  </span>
-                  <span className="flex-1">{tag.label}</span>
-                  {active && <span className="text-[11px] font-bold" style={{ color: tag.c }}>✓</span>}
+                  <I size={12} style={{ color: tag.c }} />
+                  <span>{tag.label}</span>
                 </button>
               );
             })}
