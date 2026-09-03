@@ -227,9 +227,12 @@ const jobs = Object.entries(payload).map(([id, e]) =>
       return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end, tag: e.tag || x.tag };
     });
     const byTime = (a, b) => {
-      const [ah, am] = ((a.start || '99:99').split(':').map((n) => Number(n) || 0));
-      const [bh, bm] = ((b.start || '99:99').split(':').map((n) => Number(n) || 0));
-      return ah !== bh ? ah - bh : am - bm;
+      const toMin = (s) => {
+        const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '').trim());
+        if (!m) return Number.MAX_SAFE_INTEGER; // بلا وقت → آخر القائمة
+        return Number(m[1]) * 60 + Number(m[2]);
+      };
+      return toMin(a.start) - toMin(b.start);
     };
     return [...base, ...extra].sort(byTime);
   }, [day, edits, extras, deletes]);
@@ -473,8 +476,9 @@ const jobs = Object.entries(payload).map(([id, e]) =>
           <div className="flex gap-2">
             <button
               onClick={addTask}
-              disabled={!formTitle.trim()}
-              className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all"
+              disabled={!formTitle.trim() || !/^\d{1,2}:\d{2}$/.test(formStart)}
+              title={!formTitle.trim() ? t.addTitle : (formStart ? '' : (lang === 'en' ? 'Pick a start time first' : 'اختار وقت البدء الأول'))}
+              className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 transition-all"
             >
               {t.addBtn}
             </button>
