@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check, Clock, Pencil, Sun, BookOpen,
   Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X, Briefcase, Code2, ChevronDown,
