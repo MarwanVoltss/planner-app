@@ -14,8 +14,16 @@ export default {
     // Allows a manual test via browser: /ping
     const url = new URL(request.url);
     if (url.pathname === '/ping') {
-      const out = await run(env);
-      return new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json' } });
+      try {
+        const out = await run(env);
+        let beat = '(none)';
+        try { await fsSet(env.FIREBASE_PROJECT_ID, 'planner-meta/heartbeat', { t: String(Date.now()) }); beat = 'ok'; }
+        catch (e) { beat = 'ERR ' + e.message; }
+        out.beat = beat;
+        return new Response(JSON.stringify(out), { headers: { 'content-type': 'application/json' } });
+      } catch (e) {
+        return new Response('ERROR: ' + e.message, { status: 500 });
+      }
     }
     return new Response('planner-reminder worker', { status: 200 });
   },
@@ -27,7 +35,7 @@ const DAYS = [
   { key: 'thu', label: 'الخميس' }, { key: 'fri', label: 'الجمعة' },
   { key: 'sat', label: 'السبت' },
 ];
-const DAY_ORDER = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
 
 function fsUrl(projectId, path) {
   return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${path}`;
@@ -64,7 +72,13 @@ function plain(fields) {
     else if (v.integerValue !== undefined) out[k] = Number(v.integerValue);
     else if (v.booleanValue !== undefined) out[k] = v.booleanValue;
     else if (v.mapValue) out[k] = v.mapValue.fields ? plain(v.mapValue.fields) : {};
-    else if (v.arrayValue) out[k] = (v.arrayValue.values || []).map((x) => plain(x.mapValue.fields));
+    else if (v.arrayValue) out[k] = (v.arrayValue.values || []).map((x) => {
+      if (x.stringValue !== undefined) return x.stringValue;
+      if (x.booleanValue !== undefined) return x.booleanValue;
+      if (x.integerValue !== undefined) return Number(x.integerValue);
+      if (x.mapValue) return x.mapValue.fields ? plain(x.mapValue.fields) : {};
+      return null;
+    });
   }
   return out;
 }
@@ -72,7 +86,12 @@ function plain(fields) {
 function toFields(obj) {
   const f = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (Array.isArray(v)) f[k] = { arrayValue: { values: v.map((x) => ({ mapValue: { fields: toFields(x) } })) } };
+    if (Array.isArray(v)) f[k] = { arrayValue: { values: v.map((x) => {
+      if (typeof x === 'string') return { stringValue: x };
+      if (typeof x === 'boolean') return { booleanValue: x };
+      if (typeof x === 'number') return { integerValue: String(x) };
+      return { mapValue: { fields: toFields(x) } };
+    }) } };
     else if (typeof v === 'object' && v !== null) f[k] = { mapValue: { fields: toFields(v) } };
     else if (typeof v === 'boolean') f[k] = { booleanValue: v };
     else if (typeof v === 'number') f[k] = { integerValue: String(v) };
@@ -88,8 +107,20 @@ function cairoParts(utcNow) {
   const d = new Date(utcNow.getTime() + offset * 3600 * 1000);
   const hh = String(d.getUTCHours()).padStart(2, '0');
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  const gb = d.getUTCDay();
-  return { hhmm: `${hh}:${mm}`, dayKey: DAY_ORDER[(gb + 1) % 7] };
+  const wd = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d.getUTCDay()];
+  return { hhmm: `${hh}:${mm}`, dayKey: wd };
+}
+
+// تاريخ اليوم بتوقيت القاهرة بصيغة YYYY-MM-DD (نفس التي بتبعته الموقع لما ينشر الـ checks).
+function cairoDateKey(utcNow) {
+  const m = utcNow.getUTCMonth();
+  const winter = m <= 3 || m === 10 || m === 11;
+  const offset = winter ? 2 : 3;
+  const d = new Date(utcNow.getTime() + offset * 3600 * 1000);
+  const y = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${mm}-${dd}`;
 }
 
 async function tg(env, method, payload) {
@@ -99,6 +130,99 @@ async function tg(env, method, payload) {
     body: JSON.stringify(payload),
   });
   return r.json();
+}
+
+const CELLIMG = 'https://marwanvoltss.github.io/planner-app/celebrate.png';
+
+// اللينكات اللي إنت بعتالها ليا — كل رابطة بترجّع صورة محددة (الصورة اللي "طلعت له").
+// البوت يختار عشوائيًا من الصور دي كل ما ترد "تمام".
+const USER_PINS_RAW = [
+  'https://pin.it/3QEAerNNV',
+  'https://pin.it/1pKXdoteS',
+  'https://pin.it/2HuOfQAbm',
+  'https://pin.it/3jVpVGex8',
+  'https://pin.it/574rRLFed',
+  'https://pin.it/2hOEVCAN3',
+  'https://pin.it/2D7o6cOdD',
+];
+// الصور المباشرة للروابط (الأولى الواضحة في كل صفحه من صفحاتك).
+const PIN_DIRECT = [
+  'https://i.pinimg.com/736x/5c/2e/bc/5c2ebc660f46bd024d2d17d48db67ba8.jpg',
+  'https://i.pinimg.com/736x/ed/1b/ec/ed1bec85d9bde294e457a6ff289f6cc2.jpg',
+  'https://i.pinimg.com/736x/9e/6c/6d/9e6c6d25a6a8686708d2802638d01dcb.jpg',
+  'https://i.pinimg.com/736x/14/cb/91/14cb91ae2b854434e2fdb8eb60ecb6e2.jpg',
+  'https://i.pinimg.com/736x/39/d6/25/39d625f5e5c5cc7be804725f6d65b554.jpg',
+  'https://i.pinimg.com/736x/d8/29/e3/d829e3a0c8290f7ffb0346e31fa630ee.jpg',
+  'https://i.pinimg.com/736x/9a/33/51/9a3351cf356a85df23a73a93c70ff49b.jpg',
+];
+
+// كلمات ممنوعة تمامًا — أي صورة/رابط فيها واحدة من دول تُحجب (منع +18/محتوى ناشئ).
+const NSFW = [
+  'nsfw', 'adult', 'hotgirl', 'hot girl', 'porn', 'sexy', 'sextape', 'nude', 'naked',
+  'onlyfans', '+18', 'leaked', 'bikini', 'lingerie', 'ass', 'boobs', 'tits', 'x18',
+  'escort', 'camgirl',
+];
+function isNsfw(text) {
+  const t = (text || '').toLowerCase();
+  return NSFW.some((w) => t.includes(w));
+}
+
+// للحماية: نمنع فوريًا أي صورة ناشئة.
+// pinCandidates() بترجع الصورة العشوائية الأولانية (اللي هندور بيها)، والباقي كاحتياطي لو الصورة ديه وقعت/مش متاحة.
+let lastPinIdx = -1;
+function pinCandidates() {
+  const pool = PIN_DIRECT.filter((u) => !isNsfw(u));
+  if (pool.length === 0) return [];
+  let lead = Math.floor(Math.random() * pool.length);
+  if (pool.length > 1 && lead === lastPinIdx) lead = (lead + 1) % pool.length;
+  lastPinIdx = lead;
+  const rest = pool.filter((_, i) => i !== lead);
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  return [pool[lead], ...rest];
+}
+
+function dueText(hhmm, title) {
+  return `⏰ <b>يلا! بقى وقت المهمة</b> 🔔\n\n⏱️ الساعة دِلو وقتي: <b>${hhmm}</b>\n\nقوم يا بطل، أمِّنا: <b>${title}</b> 💚\n\nبعد ما تخلص، ردّل بأي كلمة (مثل «تمام») وهأبعتلك مفاجأة 🎁`;
+}
+
+function resendText(hhmm, title, idx) {
+  const pool = [
+    `🕐 اللحظة دِلو وقتي: <b>${hhmm}</b>\n\nلسه في بالك: <b>${title}</b> 💫\nقوم جهّز نفسك، أنت تقدر! قول «تمام» لما تخلص ✅`,
+    `⏰ الوقت دِلو: <b>${hhmm}</b>\n\nدلوقتي توقيت مناسبة 👌 — <b>${title}</b>\nخد نفس عميق وقوم بأي خطوة، وردّل «تمام» لما تخلص ✅`,
+    `🕺 الوقت: <b>${hhmm}</b>\n\nأنا واقف جنبك 👌 <b>${title}</b> — خطوة خطوة.\nلما تخلصها ردّ «تمام» ✅`,
+    `🌟 وقتي: <b>${hhmm}</b>\n\nحاسب أخو الوحدة، <b>${title}</b> لسه ملهتش نهاية 🚀\nخلّصها وقول «تمام» ✅`,
+    `💌 الساعة: <b>${hhmm}</b>\n\n<b>${title}</b> — حاجة واحدة في بالك: المسكّن.\nاتفضل امتلي همة وقول «تمام» لما تخلص ✅`,
+  ];
+  return pool[idx % pool.length];
+}
+
+// احتفالي لما تخلص مهمة — صورة + كلام تحفيزي، مع عدد المهام المتبقية لو عرفنا.
+function completionText(remaining, total) {
+  if (total == null) {
+    return `🎉 <b>مبروووك! أحسنت</b>\n\nأنجزت المهمة بنفسك 💪❤️\nفخور بيك، ماتوقفش — الهمّة جاية! 🚀`;
+  }
+  if (remaining === 0) {
+    return `🏆 <b>مبروووك! إنت فنان</b>\n\nخلصت كل مهامك النهارده (${total}/${total}) 💯\nتعبت أنهارده وافتح التقدير — أنت بطل! 🚀`;
+  }
+  const n = remaining;
+  const plural = n === 1 ? 'مهمة واحدة' : (n === 2 ? 'مهمتين' : `${n} مهايم`);
+  return `🎉 <b>مبروووك! أنجزت وحدة</b> 💪❤️\n\nلسه قدامك <b>${plural}</b> النهارده.\nغمده واحده واحده — عالطريق! 🚀`;
+}
+
+async function completion(env, chatId, remaining, total) {
+  const text = completionText(remaining, total);
+  // Try a few random pin images in order; always land on celebrate.png if all fail.
+  const candidates = [...pinCandidates(), CELLIMG];
+  for (const photo of candidates) {
+    try {
+      const res = await tg(env, 'sendPhoto', { chat_id: chatId, photo, caption: text, parse_mode: 'HTML' });
+      if (res && res.ok) return; // delivered, done
+    } catch (e) { console.log('pull-warn', e.message); }
+  }
+  try { await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }); } catch (_) {}
 }
 
 async function run(env) {
@@ -124,25 +248,60 @@ async function run(env) {
   const tasks = (allSched[dayKey] || []).map((it) => ({ id: it.id, title: it.title, start: it.start }));
   const dueNow = tasks.filter((t) => t.start === hhmm);
 
+  // ---- لو لقى مهمة جديدة متمّمة (تكتب "تمام" على المهمة في الموقع) بيهنّي وبيقول الباقي ----
+  const dateKey = cairoDateKey(now);
+  let checksToday = {};
+  try { checksToday = (await fsGet(projectId, 'planner-meta/checks'))?.byDate?.[dateKey] || {}; }
+  catch (e) { /* empty */ }
+  const doneIds = Object.keys(checksToday || {}).filter((id) => checksToday[id]);
+  let progress = {};
+  try { progress = (await fsGet(projectId, 'planner-meta/progress')) || {}; }
+  catch (e) { /* empty */ }
+
+  if (progress.date !== dateKey) {
+    // يوم جديد — نبدأ حساب من غير ما نهنّي على مهايم تمّت قبل كده.
+    await fsSet(projectId, 'planner-meta/progress', { date: dateKey, done: doneIds }).catch(() => {});
+  } else {
+    const alreadyDone = progress.done || [];
+    const newDone = doneIds.filter((id) => !alreadyDone.includes(id));
+    if (newDone.length > 0) {
+      const total = tasks.length;
+      const remaining = Math.max(0, total - doneIds.length);
+      await completion(env, chatId, remaining, total); // تهنيئة + صورة عشوائية + الباقي
+      await fsSet(projectId, 'planner-meta/progress', { date: dateKey, done: doneIds }).catch(() => {});
+    } else if (doneIds.length !== alreadyDone.length) {
+      // حدّث بس من غير ما نهنّي (حالة إلغاء إتمام).
+      await fsSet(projectId, 'planner-meta/progress', { date: dateKey, done: doneIds }).catch(() => {});
+    }
+  }
+
   // Acknowledge: any message you sent to the bot stops all pending reminders.
   const upd = await tg(env, 'getUpdates', { offset: lastUpdateId + 1, timeout: 0, allowed_updates: ['message'] });
   const updates = (upd.ok && upd.result) ? upd.result : [];
   const newLast = updates.length ? Math.max(...updates.map((u) => u.update_id)) : lastUpdateId;
   let pendingCopy = { ...pending };
 
-  if (updates.length > 0) pendingCopy = {};
-
-  for (const t of dueNow) {
-    if (pendingCopy[t.id]) continue;
-    pendingCopy[t.id] = { start: t.start, title: t.title, firstSent: Date.now() };
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}\n\n<i>رد على البوت بأي كلمة لإيقاف تذكير هذه المهمة.</i>`;
-    const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
-    console.log('sent', t.id, res.ok);
+  if (updates.length > 0) {
+    const rim = Math.max(0, tasks.length - doneIds.length);
+    await completion(env, chatId, rim, tasks.length);     // user replied → celebrate + باقي المهام
+    pendingCopy = {};
   }
 
   let reSent = 0;
+
+  for (const t of dueNow) {
+    if (pendingCopy[t.id]) continue;
+    pendingCopy[t.id] = { start: t.start, title: t.title, firstSent: Date.now(), idx: 0 };
+    const text = dueText(t.start, t.title);
+    const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
+    if (res.ok) reSent++;
+  }
+
   for (const [id, t] of Object.entries(pendingCopy)) {
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}\n\n<i>لسه مستنية رجوعك! رد على البوت لإيقافه.</i>`;
+    if (!pending[id]) continue;
+    const idx = (pending[id].idx || 0) + 1;
+    pendingCopy[id].idx = idx;
+    const text = resendText(t.start, t.title, idx);
     const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     if (res.ok) reSent++;
   }

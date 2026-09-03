@@ -4,7 +4,7 @@ import {
   Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
-import { loadEdits, saveEdit, removeEdit, replaceAllEdits, publishSchedule } from './firebase/firestore';
+import { loadEdits, saveEdit, removeEdit, replaceAllEdits, publishSchedule, publishChecks } from './firebase/firestore';
 
 const STORE_KEY = 'planner-state-v1';
 const SETTINGS_KEY = 'planner-settings-v1';
@@ -111,6 +111,7 @@ export default function App() {
   const [day, setDay] = useState(todayKey());
   const [checks, setChecks] = useState(() => loadState()?.checks || {});
   const [edits, setEdits] = useState(() => loadState()?.edits || {});
+  const [extras, setExtras] = useState(() => loadState()?.extras || {});
   const [now, setNow] = useState(nowTime());
   const settings = loadSettings();
   const [lang, setLang] = useState(settings.lang || 'ar');
@@ -129,8 +130,8 @@ export default function App() {
   }, [theme, lang]);
 
   const persist = useCallback(() => {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ checks, edits }));
-  }, [checks, edits]);
+    localStorage.setItem(STORE_KEY, JSON.stringify({ checks, edits, extras }));
+  }, [checks, edits, extras]);
   useEffect(() => { persist(); }, [persist]);
 
   // Load any server-side edits (shared with the Telegram bot) once.
@@ -140,7 +141,7 @@ export default function App() {
       if (!alive) return;
       const merged = { ...(loadState()?.edits || {}), ...remote };
       setEdits(merged);
-      localStorage.setItem(STORE_KEY, JSON.stringify({ checks: loadState()?.checks || {}, edits: merged }));
+      localStorage.setItem(STORE_KEY, JSON.stringify({ checks: loadState()?.checks || {}, edits: merged, extras: loadState()?.extras || {} }));
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -156,8 +157,9 @@ export default function App() {
     Promise.all(jobs).catch(() => {});
   }, [editedJson, editedEntries.length]);
 
-  // Publish the full merged week schedule (defaults + your edits) to Firestore
+  // Publish the full merged week schedule (defaults + edits + extras) to Firestore
   // so the always-on cloud reminder runs on exactly what you see in the app.
+  const extrasJson = JSON.stringify(extras);
   useEffect(() => {
     const merged = {};
     for (const dk of Object.keys(WEEK)) {
@@ -166,8 +168,25 @@ export default function App() {
         return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
       });
     }
+    // Append any user-added tasks for each day.
+    for (const dk of Object.keys(extras || {})) {
+      const list = merged[dk] || (merged[dk] = []);
+      for (const x of extras[dk] || []) {
+        const e = edits[x.id] || {};
+        list.push({ id: x.id, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end });
+      }
+    }
     publishSchedule(merged).catch(() => {});
-  }, [editedJson]);
+  }, [editedJson, extrasJson]);
+
+  // Publish the done-state (checks) to Firestore keyed by today's date so the
+  // bot can see how many tasks remain today and celebrate when you finish one.
+  const checksJson = JSON.stringify(checks);
+  useEffect(() => {
+    const d = new Date();
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    publishChecks({ [key]: checks }).catch(() => {});
+  }, [checksJson]);
 
   useEffect(() => { const id = setInterval(() => setNow(nowTime()), 1000); return () => clearInterval(id); }, []);
 
@@ -181,11 +200,16 @@ export default function App() {
 
   const perItem = useMemo(() => {
     const source = WEEK[day] || [];
-    return source.map((it) => {
+    const base = source.map((it) => {
       const e = edits[it.id] || {};
       return { ...it, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
     });
-  }, [day, edits]);
+    const extra = (extras[day] || []).map((x) => {
+      const e = edits[x.id] || {};
+      return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end };
+    });
+    return [...base, ...extra];
+  }, [day, edits, extras]);
 
   const doneCount = perItem.filter((it) => checks[it.id]).length;
   const total = perItem.length;
@@ -193,6 +217,25 @@ export default function App() {
 
   function toggleCheck(id) { setChecks((c) => ({ ...c, [id]: !c[id] })); }
   function updateItem(id, patch) { setEdits((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } })); }
+
+  // Add a brand-new custom task to the currently selected day.
+  function addTask() {
+    const id = `extra-${Date.now()}`;
+    setExtras((ex) => {
+      const list = ex[day] || [];
+      return { ...ex, [day]: [...list, { id, title: '', start: now, end: null, tag: 'rest' }] };
+    });
+  }
+  // Remove a custom task entirely.
+  function removeTask(id) {
+    setExtras((ex) => {
+      const next = { ...ex };
+      Object.keys(next).forEach((dk) => { next[dk] = next[dk].filter((x) => x.id !== id); });
+      return next;
+    });
+    setEdits((e) => { const n = { ...e }; delete n[id]; return n; });
+    setChecks((c) => { const n = { ...c }; delete n[id]; return n; });
+  }
 
   function resetDay() {
     const d = {};
@@ -369,10 +412,20 @@ export default function App() {
               onChangeEnd={(v) => updateItem(it.id, { end: v })}
               onToggle={() => toggleCheck(it.id)}
               showEdit={!done}
+              isExtra={!!(extras[day] || []).find((x) => x.id === it.id)}
+              onRemove={() => removeTask(it.id)}
             />
           );
         })}
       </div>
+
+      {/* Add task button */}
+      <button
+        onClick={addTask}
+        className="w-full mt-3 py-3 rounded-2xl border border-dashed border-white/20 text-gray-400 hover:text-white hover:border-white/40 bg-white/[0.03] font-semibold text-[13px] cursor-pointer transition-colors"
+      >
+        {lang === 'en' ? '+ Add a task' : '+ ضيف مهمة'}
+      </button>
     </div>
   );
 }
@@ -389,7 +442,7 @@ const TAG_ICON = {
   sleep: Moon,
 };
 
-function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onToggle, showEdit }) {
+function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onToggle, showEdit, isExtra, onRemove }) {
   const [open, setOpen] = useState(false);
   const tagLabel = TAGS[it.tag]?.label || '';
   return (
@@ -480,6 +533,14 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
             />
           </div>
           <button onClick={() => setOpen(false)} className="col-span-2 mt-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all">{t.saveEdit}</button>
+          {isExtra && (
+            <button
+              onClick={() => { setOpen(false); onRemove(); }}
+              className="col-span-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-400/30 text-red-300 font-semibold text-[12px] cursor-pointer transition-all"
+            >
+              {lang === 'en' ? 'Delete task' : 'حذف المهمة'}
+            </button>
+          )}
         </div>
       )}
     </div>

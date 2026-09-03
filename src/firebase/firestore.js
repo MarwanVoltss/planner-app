@@ -73,12 +73,24 @@ export async function replaceAllEdits(edits) {
   }
 }
 
-// Publish the full merged schedule (schedule.js defaults + your edits) so the
+// Publish the full merged schedule (schedule.js defaults + your edits + extras) so the
 // always-on cloud reminder reads exactly what you see in the app.
 // `merged` = { dayKey: [{ id, title, start, end }] }.
 export async function publishSchedule(merged) {
   try {
     await setDoc(doc(db, 'planner-schedule', 'index'), { all: merged });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+// Publish the done-state (checks) keyed by date so the Telegram bot can know how
+// many tasks you finished today and celebrate when you mark one done.
+// `checksByDate` = { 'YYYY-MM-DD': { [taskId]: true } }.
+export async function publishChecks(checksByDate) {
+  try {
+    await setDoc(doc(db, 'planner-meta', 'checks'), { byDate: checksByDate || {} });
     return true;
   } catch (err) {
     return false;
