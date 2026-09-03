@@ -200,6 +200,10 @@ function resendText(hhmm, title, start) {
   return `<b>⏳ تنبيه متأخر بـ ${dm} دقيقة!</b>\n\nالساعة دلوقتي <b>${hhmm}</b> ومهمة <b>${title}</b> (اللى كانت الساعة <b>${start}</b>) لسه متبدتش!\n\nبلاش تسويف يا بطل، ابدأ فيها ورد عليا حالا عشان أوقف التنبيهات. 🛑`;
 }
 
+function endText(hhmm, title, start, end) {
+  return `<b>✅ خلصت خلاص؟ تقريبا كده!</b>\n\nمهمة <b>${title}</b> (اللى بدأت <b>${start}</b>) غالبًا خلصت وقتها الساعة <b>${end || hhmm}</b>.\n\nلو خلصت صدقني نفخت راسي، ولو لسه فيها حاجة كمّل وارجعلي 💪`;
+}
+
 // احتفالي لما ترد أو تخلص مهمة — صورة + كلام تحفيزي، مع عدد المهام المتبقية.
 function completionText(completedTitle, remaining, total) {
   if (total == null) {
@@ -242,12 +246,17 @@ async function run(env) {
   try { pending = (await fsGet(projectId, 'planner-meta/pending'))?.tasks || {}; }
   catch (e) { /* empty */ }
 
+  let sentState = {};
+  try { sentState = (await fsGet(projectId, 'planner-meta/sent')) || {}; }
+  catch (e) { /* empty */ }
+
   let lastUpdateId = 0;
   try { lastUpdateId = (await fsGet(projectId, 'planner-meta/tg'))?.lastUpdateId || 0; }
   catch (e) { /* 0 */ }
 
-  const tasks = (allSched[dayKey] || []).map((it) => ({ id: it.id, title: it.title, start: it.start }));
+  const tasks = (allSched[dayKey] || []).map((it) => ({ id: it.id, title: it.title, start: it.start, end: it.end, tag: it.tag }));
   const dueNow = tasks.filter((t) => t.start === hhmm);
+  const endingNow = tasks.filter((t) => t.end && t.end === hhmm);
 
   // ---- لو لقى مهمة جديدة متمّمة (تكتب "تمام" على المهمة في الموقع) بيهنّي وبيقول الباقي ----
   const dateKey = cairoDateKey(now);
@@ -294,14 +303,33 @@ async function run(env) {
   }
 
   let reSent = 0;
+  let endSent = 0;
 
+  // --- إشعار بدء المهمة (مرة واحدة لكل مهمة في اليوم) ---
+  const sentStart = sentState.started || [];
   for (const t of dueNow) {
     if (pendingCopy[t.id]) continue;
+    if (sentStart.includes(t.id)) continue;
     pendingCopy[t.id] = { start: t.start, title: t.title, firstSent: Date.now(), idx: 0 };
     const text = dueText(hhmm, t.title, null, t.start);
     const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     if (res.ok) reSent++;
   }
+
+  // --- إشعار انتهاء وقت المهمة (مرة واحدة) ---
+  const sentEnd = sentState.ended || [];
+  for (const t of endingNow) {
+    if (sentEnd.includes(t.id)) continue;
+    // تجاهل المهمة اللي لسه بتبدأ (نفس المعاد) — النهاية للإشعار بعد البداية
+    if (t.start === t.end) continue;
+    const text = endText(hhmm, t.title, t.start, t.end);
+    const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
+    if (res.ok) endSent++;
+  }
+
+  // حافظ على بدئتنا + نهايات أُرسلت حتى لا تتكرر في نفس اليوم
+  const newStarted = [...new Set([...sentStart, ...dueNow.map((t) => t.id)])];
+  const newEnded = [...new Set([...sentEnd, ...endingNow.filter((t) => t.start !== t.end).map((t) => t.id)])];
 
   for (const [id, t] of Object.entries(pendingCopy)) {
     if (!pending[id]) continue;
@@ -312,6 +340,13 @@ async function run(env) {
 
   if (Object.keys(pendingCopy).length === 0) await fsDel(projectId, 'planner-meta/pending').catch(() => {});
   else await fsSet(projectId, 'planner-meta/pending', { tasks: pendingCopy }).catch(() => {});
+
+  // Save which tasks already got their start/end notices today (prevents re-sending every minute).
+  await fsSet(projectId, 'planner-meta/sent', {
+    date: dateKey,
+    started: newStarted,
+    ended: newEnded,
+  }).catch(() => {});
 
   if (newLast > lastUpdateId) {
     await fsSet(projectId, 'planner-meta/tg', { lastUpdateId: newLast }).catch(() => {});
