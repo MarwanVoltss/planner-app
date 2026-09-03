@@ -538,21 +538,24 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
           <Check size={14} strokeWidth={3.5} />
         </button>
 
-        <div className="w-10 h-10 shrink-0 rounded-xl grid place-items-center transition-transform group-hover:scale-105"
-          style={{ background: `${color}1f`, border: `1px solid ${color}55` }}
+        <div className="w-11 h-11 shrink-0 rounded-2xl grid place-items-center transition-transform group-hover:scale-105"
+          style={{ background: `linear-gradient(135deg, ${color}2e, ${color}14)`, border: `1px solid ${color}66`, boxShadow: `0 0 12px -4px ${color}` }}
         >
-          <Icon size={18} style={{ color }} />
+          <Icon size={20} style={{ color }} strokeWidth={2} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className={`text-[14px] leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-100 font-semibold'}`}>{it.title}</div>
-          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1">
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mt-1.5">
             {tagLabel && (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md" style={{ background: `${color}22`, color }}>
+              <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: `${color}1c`, color, border: `1px solid ${color}55` }}
+              >
+                <Icon size={11} style={{ color }} />
                 {tagLabel}
               </span>
             )}
-            <span className="inline-flex items-center gap-1 text-[11px] tabular-nums px-1.5 py-0.5 rounded-md bg-black/30 border border-white/10 text-gray-300">
+            <span className="inline-flex items-center gap-1.5 text-[11px] tabular-nums px-2 py-0.5 rounded-full bg-black/30 border border-white/10 text-gray-300">
               <Clock size={11} className="text-white/40" />
               <span dir="ltr">{fmt12(it.start, lang)}</span>
               {it.end && <span dir="ltr" className="text-gray-500">→ {fmt12(it.end, lang)}</span>}
