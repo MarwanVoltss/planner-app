@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check, Clock, Pencil, Sun, BookOpen,
-  Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X, Briefcase, Code2,
+  Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X, Briefcase, Code2, ChevronDown,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
 import { loadEdits, saveEdit, removeEdit, replaceAllEdits, publishSchedule, publishChecks } from './firebase/firestore';
@@ -423,7 +423,7 @@ const jobs = Object.entries(payload).map(([id, e]) =>
 
       {/* Schedule list */}
       <div className="space-y-2">
-        {perItem.map((it) => {
+        {perItem.map((it, idx) => {
           const Icon = TAG_ICON[it.tag] || Clock;
           const color = TAGS[it.tag]?.c || '#a78bfa';
           const done = !!checks[it.id];
@@ -431,6 +431,7 @@ const jobs = Object.entries(payload).map(([id, e]) =>
           return (
             <TaskRow
               key={it.id}
+              num={idx + 1}
               it={it}
               color={color}
               Icon={Icon}
@@ -461,7 +462,7 @@ const jobs = Object.entries(payload).map(([id, e]) =>
             className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
           />
           <label className="text-[11px] text-gray-400 mb-1 block">{t.addType}</label>
-          <TagGrid value={formTag} onSelect={setFormTag} />
+          <TagPicker value={formTag} onSelect={setFormTag} />
           <label className="text-[11px] text-gray-400 mt-2">{t.start}</label>
           <input
             type="time"
@@ -514,40 +515,75 @@ const TAG_ICON = {
 // Display order for the type picker: the everyday activity types first.
 const TAG_ORDER = ['work', 'study', 'rest', 'gym', 'dev', 'prayer', 'meal', 'read', 'sleep', 'wake', 'store'];
 
-function TagGrid({ value, onSelect, withLabel }) {
+function TagPicker({ value, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const current = TAGS[value] || TAGS.rest;
+  const Icon = TAG_ICON[value] || Coffee;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {TAG_ORDER.map((key) => {
-        const tag = TAGS[key];
-        if (!tag) return null;
-        const Icon = TAG_ICON[key] || Clock;
-        const active = value === key;
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onSelect(key)}
-            title={tag.label}
-            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-full transition-all cursor-pointer ${
-              active ? 'scale-[1.06]' : 'opacity-60'
-            }`}
-            style={{
-              background: `${tag.c}${active ? '2e' : '12'}`,
-              border: `1px solid ${tag.c}${active ? '' : '55'}`,
-              color: tag.c,
-              boxShadow: active ? `0 0 10px -3px ${tag.c}` : 'none',
-            }}
-          >
-            <Icon size={12} style={{ color: tag.c }} />
-            <span>{tag.label}</span>
-          </button>
-        );
-      })}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all cursor-pointer"
+        style={{
+          background: `linear-gradient(135deg, ${current.c}2e, ${current.c}12)`,
+          border: `1px solid ${current.c}66`,
+          color: '#fff',
+          boxShadow: `0 0 12px -3px ${current.c}`,
+        }}
+      >
+        <span className="inline-flex items-center gap-2 text-[13px] font-semibold">
+          <Icon size={15} style={{ color: current.c }} />
+          <span style={{ color: '#eee' }}>{current.label}</span>
+        </span>
+        <ChevronDown size={16} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} style={{ color: 'rgba(255,255,255,0.6)' }} />
+      </button>
+
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute z-20 mt-1.5 w-full rounded-2xl overflow-hidden backdrop-blur-xl"
+          style={{
+            background: 'rgba(20,16,38,0.85)',
+            border: '1px solid rgba(167,139,250,0.35)',
+            boxShadow: '0 0 26px -6px rgba(167,139,250,0.55), 0 18px 40px -12px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div className="max-h-56 overflow-y-auto no-scrollbar">
+            {TAG_ORDER.map((key) => {
+              const tag = TAGS[key];
+              if (!tag) return null;
+              const I = TAG_ICON[key] || Coffee;
+              const active = value === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { onSelect(key); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-right transition-colors cursor-pointer ${
+                    active ? 'bg-white/10' : 'hover:bg-white/5'
+                  }`}
+                  style={{ color: active ? '#fff' : 'rgba(255,255,255,0.75)' }}
+                >
+                  <span
+                    className="grid place-items-center w-7 h-7 rounded-lg"
+                    style={{ background: `${tag.c}22`, border: `1px solid ${tag.c}55`, boxShadow: active ? `0 0 8px -2px ${tag.c}` : 'none' }}
+                  >
+                    <I size={14} style={{ color: tag.c }} />
+                  </span>
+                  <span className="flex-1">{tag.label}</span>
+                  {active && <span className="text-[11px] font-bold" style={{ color: tag.c }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onChangeTag, onToggle, showEdit, onRemove }) {
+function TaskRow({ num, it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onChangeTag, onToggle, showEdit, onRemove }) {
   const [open, setOpen] = useState(false);
   const tagLabel = TAGS[it.tag]?.label || '';
   return (
@@ -558,6 +594,18 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
       style={isNow ? { boxShadow: '0 0 0 1px var(--neon), 0 0 22px -8px var(--neon)' } : {}}
     >
       <div className="flex items-center gap-3">
+        <span
+          className="shrink-0 grid place-items-center w-6 h-6 rounded-lg select-none"
+          style={{
+            background: 'linear-gradient(135deg, rgba(167,139,250,0.35), rgba(167,139,250,0.12))',
+            border: '1px solid rgba(167,139,250,0.45)',
+            color: '#d8ccff',
+            fontSize: '11px',
+            fontWeight: 700,
+          }}
+        >
+          {num}
+        </span>
         <button
           onClick={onToggle}
           aria-label={done ? t.toggleUndone : t.toggleDone}
@@ -642,7 +690,7 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
           </div>
           <label className="text-[11px] text-gray-400 col-span-2 -mb-0.5">{t.addType}</label>
           <div className="col-span-2">
-            <TagGrid value={it.tag} onSelect={onChangeTag} />
+            <TagPicker value={it.tag} onSelect={onChangeTag} />
           </div>
           <button onClick={() => setOpen(false)} className="col-span-2 mt-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all">{t.saveEdit}</button>
           <button
