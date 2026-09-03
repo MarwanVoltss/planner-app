@@ -531,7 +531,7 @@ function TagPicker({ value, onSelect }) {
   const current = TAGS[value] || TAGS.rest;
   const Icon = TAG_ICON[value] || Coffee;
   return (
-    <div ref={ref}>
+    <div ref={ref} style={{ position: 'relative', zIndex: 40 }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -553,11 +553,13 @@ function TagPicker({ value, onSelect }) {
 
       {open && (
         <div
-          className="mt-1.5 rounded-xl p-1"
+          className="mt-1.5 rounded-xl"
           style={{
-            background: 'rgba(24,18,44,0.9)',
-            border: '1px solid rgba(167,139,250,0.3)',
-            boxShadow: '0 0 22px -6px rgba(167,139,250,0.4)',
+            background: '#161026',
+            border: '1px solid #6d56d8',
+            boxShadow: '0 10px 26px -6px rgba(0,0,0,0.75), 0 0 0 1px rgba(167,139,250,0.25)',
+            position: 'relative',
+            zIndex: 50,
           }}
         >
           <div className="flex flex-wrap gap-1.5">
