@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check, Clock, Pencil, Sun, BookOpen,
-  Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X,
+  Dumbbell, Package, Moon, Coffee, Pizza, MapPin, ListChecks, Sparkles, Languages, Palette, X, Briefcase, Code2,
 } from 'lucide-react';
 import { WEEK, DAYS, TAGS, DAY_ORDER } from './lib/schedule';
 import { loadEdits, saveEdit, removeEdit, replaceAllEdits, publishSchedule, publishChecks } from './firebase/firestore';
@@ -214,7 +214,7 @@ export default function App() {
       const e = edits[x.id] || {};
       return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end };
     });
-    return [...base, ...extra];
+    return [...base, ...extra].sort((a, b) => (a.start || '99:99').localeCompare(b.start || '99:99'));
   }, [day, edits, extras, deletes]);
 
   const doneCount = perItem.filter((it) => checks[it.id]).length;
@@ -442,6 +442,7 @@ export default function App() {
 
 const TAG_ICON = {
   wake: Sun,
+  work: Briefcase,
   study: BookOpen,
   rest: Coffee,
   meal: Pizza,
@@ -449,6 +450,7 @@ const TAG_ICON = {
   gym: Dumbbell,
   store: Package,
   read: BookOpen,
+  dev: Code2,
   sleep: Moon,
 };
 
