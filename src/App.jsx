@@ -27,6 +27,10 @@ const STR = {
     start: 'Start',
     end: 'End',
     saveEdit: 'Save edit',
+    addTitle: 'Title',
+    addType: 'Type',
+    addBtn: 'Add task',
+    cancel: 'Cancel',
     theme: 'Theme',
     language: 'Language',
     settings: 'Settings',
@@ -49,6 +53,10 @@ const STR = {
     start: 'البداية',
     end: 'النهاية',
     saveEdit: 'حفظ التعديل',
+    addTitle: 'عنوان المهمة',
+    addType: 'نوع المهمة',
+    addBtn: 'إضافة',
+    cancel: 'إلغاء',
     theme: 'الوجه',
     language: 'اللغة',
     settings: 'الإعدادات',
@@ -118,6 +126,10 @@ export default function App() {
   const [lang, setLang] = useState(settings.lang || 'ar');
   const [theme, setTheme] = useState(settings.theme || 'violet');
   const [showSettings, setShowSettings] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formTitle, setFormTitle] = useState('');
+  const [formTag, setFormTag] = useState('rest');
+  const [formStart, setFormStart] = useState(() => nowTime().slice(0, 5));
 
   const t = STR[lang];
 
@@ -152,9 +164,9 @@ export default function App() {
   const editedJson = JSON.stringify(edits);
   useEffect(() => {
     const payload = JSON.parse(editedJson);
-    const jobs = Object.entries(payload).map(([id, e]) =>
-      e && (e.title || e.start || e.end) ? saveEdit(id, e) : removeEdit(id)
-    );
+const jobs = Object.entries(payload).map(([id, e]) =>
+  e && (e.title || e.start || e.end || e.tag) ? saveEdit(id, e) : removeEdit(id)
+);
     Promise.all(jobs).catch(() => {});
   }, [editedJson, editedEntries.length]);
 
@@ -169,7 +181,7 @@ export default function App() {
         .filter((it) => !deletes[it.id])
         .map((it) => {
           const e = edits[it.id] || {};
-          return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
+          return { id: it.id, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end, tag: e.tag || it.tag };
         });
     }
     // Append any user-added tasks for each day.
@@ -177,7 +189,7 @@ export default function App() {
       const list = merged[dk] || (merged[dk] = []);
       for (const x of extras[dk] || []) {
         const e = edits[x.id] || {};
-        list.push({ id: x.id, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end });
+        list.push({ id: x.id, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end, tag: e.tag || x.tag });
       }
     }
     publishSchedule(merged).catch(() => {});
@@ -208,11 +220,11 @@ export default function App() {
       .filter((it) => !deletes[it.id])
       .map((it) => {
         const e = edits[it.id] || {};
-        return { ...it, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end };
+        return { ...it, title: e.title || it.title, start: e.start || it.start, end: e.end ?? it.end, tag: e.tag || it.tag };
       });
     const extra = (extras[day] || []).map((x) => {
       const e = edits[x.id] || {};
-      return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end };
+      return { ...x, title: e.title || x.title, start: e.start || x.start, end: e.end ?? x.end, tag: e.tag || x.tag };
     });
     return [...base, ...extra].sort((a, b) => (a.start || '99:99').localeCompare(b.start || '99:99'));
   }, [day, edits, extras, deletes]);
@@ -224,13 +236,16 @@ export default function App() {
   function toggleCheck(id) { setChecks((c) => ({ ...c, [id]: !c[id] })); }
   function updateItem(id, patch) { setEdits((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } })); }
 
-  // Add a brand-new custom task to the currently selected day.
+  // Add a brand-new custom task (from the inline form) to the currently selected day.
   function addTask() {
     const id = `extra-${Date.now()}`;
     setExtras((ex) => {
       const list = ex[day] || [];
-      return { ...ex, [day]: [...list, { id, title: '', start: now, end: null, tag: 'rest' }] };
+      return { ...ex, [day]: [...list, { id, title: formTitle, start: formStart || now, end: null, tag: formTag }] };
     });
+    setFormTitle('');
+    setFormStart(nowTime().slice(0, 5));
+    setShowAddForm(false);
   }
   // Remove a task (custom extras or a base default task, either way it's hidden + unpublished).
   function removeTask(id) {
@@ -421,6 +436,7 @@ export default function App() {
               onChangeTitle={(v) => updateItem(it.id, { title: v })}
               onChangeStart={(v) => updateItem(it.id, { start: v })}
               onChangeEnd={(v) => updateItem(it.id, { end: v })}
+              onChangeTag={(v) => updateItem(it.id, { tag: v })}
               onToggle={() => toggleCheck(it.id)}
               showEdit={!done}
               onRemove={() => removeTask(it.id)}
@@ -429,13 +445,57 @@ export default function App() {
         })}
       </div>
 
-      {/* Add task button */}
-      <button
-        onClick={addTask}
-        className="w-full mt-3 py-3 rounded-2xl border border-dashed border-white/20 text-gray-400 hover:text-white hover:border-white/40 bg-white/[0.03] font-semibold text-[13px] cursor-pointer transition-colors"
-      >
-        {lang === 'en' ? '+ Add a task' : '+ ضيف مهمة'}
-      </button>
+      {/* Add task button + inline form */}
+      {showAddForm ? (
+        <div className="glass rounded-2xl mt-3 p-4 border border-white/15" style={{ borderColor: 'var(--line)' }}>
+          <p className="text-[13px] font-bold text-gray-200 mb-2">{lang === 'en' ? 'New task' : 'مهمة جديدة'}</p>
+          <input
+            value={formTitle}
+            onChange={(e) => setFormTitle(e.target.value)}
+            placeholder={t.addTitle}
+            className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
+          />
+          <label className="text-[11px] text-gray-400">{t.addType}</label>
+          <select
+            value={formTag}
+            onChange={(e) => setFormTag(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
+          >
+            {Object.entries(TAGS).map(([key, tag]) => (
+              <option key={key} value={key}>{tag.label}</option>
+            ))}
+          </select>
+          <label className="text-[11px] text-gray-400">{t.start}</label>
+          <input
+            type="time"
+            value={formStart}
+            onChange={(e) => setFormStart(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/40 focus:outline-none mb-2"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={addTask}
+              disabled={!formTitle.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all"
+            >
+              {t.addBtn}
+            </button>
+            <button
+              onClick={() => { setShowAddForm(false); setFormTitle(''); }}
+              className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 cursor-pointer transition-all"
+            >
+              {t.cancel}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="w-full mt-3 py-3 rounded-2xl border border-dashed border-white/20 text-gray-400 hover:text-white hover:border-white/40 bg-white/[0.03] font-semibold text-[13px] cursor-pointer transition-colors"
+        >
+          {lang === 'en' ? '+ Add a task' : '+ ضيف مهمة'}
+        </button>
+      )}
     </div>
   );
 }
@@ -454,7 +514,7 @@ const TAG_ICON = {
   sleep: Moon,
 };
 
-function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onToggle, showEdit, onRemove }) {
+function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChangeStart, onChangeEnd, onChangeTag, onToggle, showEdit, onRemove }) {
   const [open, setOpen] = useState(false);
   const tagLabel = TAGS[it.tag]?.label || '';
   return (
@@ -544,6 +604,16 @@ function TaskRow({ it, color, Icon, done, isNow, lang, t, onChangeTitle, onChang
               onChange={(e) => onChangeEnd(e.target.value || null)}
             />
           </div>
+          <label className="text-[11px] text-gray-400 col-span-2 -mb-1">{t.addType}</label>
+          <select
+            className="col-span-2 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white focus:border-white/50 focus:outline-none"
+            value={it.tag}
+            onChange={(e) => onChangeTag(e.target.value)}
+          >
+            {Object.entries(TAGS).map(([key, tag]) => (
+              <option key={key} value={key}>{tag.label}</option>
+            ))}
+          </select>
           <button onClick={() => setOpen(false)} className="col-span-2 mt-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold cursor-pointer transition-all">{t.saveEdit}</button>
           <button
             onClick={() => { setOpen(false); onRemove(); }}
