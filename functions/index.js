@@ -22,12 +22,6 @@ const { getFirestore } = require('firebase-admin/firestore');
 adminInit.initializeApp();
 const db = getFirestore();
 
-const DAYS = [
-  { key: 'sun', label: 'الأحد' }, { key: 'mon', label: 'الإثنين' },
-  { key: 'tue', label: 'الثلاثاء' }, { key: 'wed', label: 'الأربعاء' },
-  { key: 'thu', label: 'الخميس' }, { key: 'fri', label: 'الجمعة' },
-  { key: 'sat', label: 'السبت' },
-];
 const DAY_ORDER = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 function cairoParts(utcNow) {
@@ -39,6 +33,30 @@ function cairoParts(utcNow) {
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
   const gb = d.getUTCDay();
   return { hhmm: `${hh}:${mm}`, dayKey: DAY_ORDER[(gb + 1) % 7] };
+}
+
+// فارق الدقائق بين وقت المهمة والساعة دلوقتي (0 = في موعدها بالضبط، موجب = متأخر).
+function diffMinutes(startHHMM, nowHHMM) {
+  const [sh, sm] = startHHMM.split(':').map(Number);
+  const [nh, nm] = nowHHMM.split(':').map(Number);
+  return (nh * 60 + nm) - (sh * 60 + sm);
+}
+
+// صورة احتفالية متاحة في الريبو (تُرفق برسائل التهنئة).
+const PIN_IMAGES = ['https://marwanvoltss.github.io/planner-app/celebrate.png'];
+
+// يرسل رسالة تهنئة مع صورة (sendPhoto) ، ويرجع للنص فقط لو فشلت الصورة.
+async function sendCelebration(chatId, text) {
+  for (const photo of PIN_IMAGES) {
+    try {
+      const res = await telegram('sendPhoto', { chat_id: chatId, photo, caption: text, parse_mode: 'HTML' });
+      if (res && res.ok) return true;
+    } catch (e) { /* try next */ }
+  }
+  try {
+    const res = await telegram('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
+    return !!(res && res.ok);
+  } catch (_) { return false; }
 }
 
 async function getSchedule() {
@@ -88,7 +106,6 @@ exports.remind = onSchedule({ schedule: '* * * * *', timeZone: 'Africa/Cairo' },
   const now = new Date();
   const { hhmm, dayKey } = cairoParts(now);
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  const dayLabel = (DAYS.find((x) => x.key === dayKey) || {}).label || dayKey;
 
   const [allSched, pending, lastUpdateId] = await Promise.all([
     getSchedule(), getPending(), getLastUpdateId(),
@@ -107,22 +124,28 @@ exports.remind = onSchedule({ schedule: '* * * * *', timeZone: 'Africa/Cairo' },
   let pendingCopy = { ...pending };
 
   if (updates.length > 0) {
+    // Student replied → celebrate with remaining count, then clear all pending.
+    const completedTask = pendingCopy[Object.keys(pendingCopy)[0]] || null;
+    const completedTitle = completedTask?.title || (tasks.length ? tasks[0].title : 'المهمة');
+    const remainingCount = Math.max(0, tasks.length - 1);
+    const cText = `<b>🎉 عاش جداً يا وحش!</b>\n\nتم رصد الرد وتسجيل إتمام مهمة <b>${completedTitle}</b> بنجاح.\n\nباقي عندك <b>${remainingCount}</b> ${remainingCount === 1 ? 'مهمة' : 'مهام'} نقفل بيه يومنا، كمل طاقة وبطل كسل! 💪`;
+    await sendCelebration(chatId, cText);
     pendingCopy = {};
-    console.log('REPLIED: cleared pending');
+    console.log('REPLIED: celebrated + cleared pending');
   }
 
   for (const t of dueNow) {
     if (pendingCopy[t.id]) continue;
     pendingCopy[t.id] = { start: t.start, title: t.title, firstSent: Date.now() };
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}\n\n<i>رد على البوت بأي كلمة لإيقاف تذكير هذه المهمة.</i>`;
+    const text = `<b>⏰ حان الآن موعد المهمة!</b>\n\n<b>المهمة:</b> ${t.title}\n<b>التصنيف:</b> مهمة | <b>الميعاد:</b> ${t.start}\n\nيلا بينا ابدأ فيها حالا، ورد عليا بأي كلمة عشان أعرف إنك انتبهت! 🎯`;
     const res = await telegram('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     console.log(`sent ${t.id}:`, res.ok);
   }
 
   let reSent = 0;
-  for (const [id, t] of Object.entries(pendingCopy)) {
-    const found = tasks.find((x) => x.id === id);
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}\n\n<i>لسه مستنية رجوعك! رد على البوت لإيقافه.</i>`;
+  for (const t of Object.values(pendingCopy)) {
+    const dm = diffMinutes(t.start, hhmm);
+    const text = `<b>⏳ تنبيه متأخر بـ ${dm} دقيقة!</b>\n\nالساعة دلوقتي <b>${hhmm}</b> ومهمة <b>${t.title}</b> (اللى كانت الساعة <b>${t.start}</b>) لسه متبدتش!\n\nبلاش تسويف يا بطل، ابدأ فيها ورد عليا حالا عشان أوقف التنبيهات. 🛑`;
     const res = await telegram('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     if (res.ok) reSent++;
   }

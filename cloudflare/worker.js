@@ -184,36 +184,37 @@ function pinCandidates() {
   return [pool[lead], ...rest];
 }
 
-function dueText(hhmm, title) {
-  return `⏰ <b>يلا! بقى وقت المهمة</b> 🔔\n\n⏱️ الساعة دِلو وقتي: <b>${hhmm}</b>\n\nقوم يا بطل، أمِّنا: <b>${title}</b> 💚\n\nبعد ما تخلص، ردّل بأي كلمة (مثل «تمام») وهأبعتلك مفاجأة 🎁`;
+// فارق الدقائق بين وقت المهمة والساعة دلوقتي (0 = في موعدها بالضبط، موجب = متأخر).
+function diffMinutes(startHHMM, nowHHMM) {
+  const [sh, sm] = startHHMM.split(':').map(Number);
+  const [nh, nm] = nowHHMM.split(':').map(Number);
+  return (nh * 60 + nm) - (sh * 60 + sm);
 }
 
-function resendText(hhmm, title, idx) {
-  const pool = [
-    `🕐 اللحظة دِلو وقتي: <b>${hhmm}</b>\n\nلسه في بالك: <b>${title}</b> 💫\nقوم جهّز نفسك، أنت تقدر! قول «تمام» لما تخلص ✅`,
-    `⏰ الوقت دِلو: <b>${hhmm}</b>\n\nدلوقتي توقيت مناسبة 👌 — <b>${title}</b>\nخد نفس عميق وقوم بأي خطوة، وردّل «تمام» لما تخلص ✅`,
-    `🕺 الوقت: <b>${hhmm}</b>\n\nأنا واقف جنبك 👌 <b>${title}</b> — خطوة خطوة.\nلما تخلصها ردّ «تمام» ✅`,
-    `🌟 وقتي: <b>${hhmm}</b>\n\nحاسب أخو الوحدة، <b>${title}</b> لسه ملهتش نهاية 🚀\nخلّصها وقول «تمام» ✅`,
-    `💌 الساعة: <b>${hhmm}</b>\n\n<b>${title}</b> — حاجة واحدة في بالك: المسكّن.\nاتفضل امتلي همة وقول «تمام» لما تخلص ✅`,
-  ];
-  return pool[idx % pool.length];
+function dueText(hhmm, title, tagLabel, start) {
+  return `<b>⏰ حان الآن موعد المهمة!</b>\n\n<b>المهمة:</b> ${title}\n<b>التصنيف:</b> ${tagLabel || 'مهمة'} | <b>الميعاد:</b> ${start}\n\nيلا بينا ابدأ فيها حالا، ورد عليا بأي كلمة عشان أعرف إنك انتبهت! 🎯`;
 }
 
-// احتفالي لما تخلص مهمة — صورة + كلام تحفيزي، مع عدد المهام المتبقية لو عرفنا.
-function completionText(remaining, total) {
+function resendText(hhmm, title, start) {
+  const dm = diffMinutes(start, hhmm);
+  return `<b>⏳ تنبيه متأخر بـ ${dm} دقيقة!</b>\n\nالساعة دلوقتي <b>${hhmm}</b> ومهمة <b>${title}</b> (اللى كانت الساعة <b>${start}</b>) لسه متبدتش!\n\nبلاش تسويف يا بطل، ابدأ فيها ورد عليا حالا عشان أوقف التنبيهات. 🛑`;
+}
+
+// احتفالي لما ترد أو تخلص مهمة — صورة + كلام تحفيزي، مع عدد المهام المتبقية.
+function completionText(completedTitle, remaining, total) {
   if (total == null) {
-    return `🎉 <b>مبروووك! أحسنت</b>\n\nأنجزت المهمة بنفسك 💪❤️\nفخور بيك، ماتوقفش — الهمّة جاية! 🚀`;
+    return `<b>🎉 عاش جداً يا وحش!</b>\n\nتم رصد الرد وتسجيل إتمام مهمة <b>${completedTitle}</b> بنجاح.\n\nباقي عندك <b>${Math.max(0, remaining)}</b> ${remaining === 1 ? 'مهمة' : 'مهام'} نقفل بيه يومنا، كمل طاقة وبطل كسل! 💪`;
   }
   if (remaining === 0) {
-    return `🏆 <b>مبروووك! إنت فنان</b>\n\nخلصت كل مهامك النهارده (${total}/${total}) 💯\nتعبت أنهارده وافتح التقدير — أنت بطل! 🚀`;
+    return `<b>🎉 عاش جداً يا وحش!</b>\n\nتم رصد الرد وتسجيل إتمام مهمة <b>${completedTitle}</b> بنجاح.\n\nباقي عندك <b>0</b> مهام نقفل بيه يومنا، كمل طاقة وبطل كسل! 💪`;
   }
   const n = remaining;
   const plural = n === 1 ? 'مهمة واحدة' : (n === 2 ? 'مهمتين' : `${n} مهايم`);
-  return `🎉 <b>مبروووك! أنجزت وحدة</b> 💪❤️\n\nلسه قدامك <b>${plural}</b> النهارده.\nغمده واحده واحده — عالطريق! 🚀`;
+  return `<b>🎉 عاش جداً يا وحش!</b>\n\nتم رصد الرد وتسجيل إتمام مهمة <b>${completedTitle}</b> بنجاح.\n\nباقي عندك <b>${plural}</b> نقفل بيه يومنا، كمل طاقة وبطل كسل! 💪`;
 }
 
-async function completion(env, chatId, remaining, total) {
-  const text = completionText(remaining, total);
+async function completion(env, chatId, completedTitle, remaining, total) {
+  const text = completionText(completedTitle, remaining, total);
   // Try a few random pin images in order; always land on celebrate.png if all fail.
   const candidates = [...pinCandidates(), CELLIMG];
   for (const photo of candidates) {
@@ -267,7 +268,9 @@ async function run(env) {
     if (newDone.length > 0) {
       const total = tasks.length;
       const remaining = Math.max(0, total - doneIds.length);
-      await completion(env, chatId, remaining, total); // تهنيئة + صورة عشوائية + الباقي
+      const doneTask = tasks.find((x) => x.id === newDone[0]);
+      const doneTitle = doneTask?.title || 'المهمة';
+      await completion(env, chatId, doneTitle, remaining, total); // تهنيئة + صورة عشوائية + الباقي
       await fsSet(projectId, 'planner-meta/progress', { date: dateKey, done: doneIds }).catch(() => {});
     } else if (doneIds.length !== alreadyDone.length) {
       // حدّث بس من غير ما نهنّي (حالة إلغاء إتمام).
@@ -282,8 +285,11 @@ async function run(env) {
   let pendingCopy = { ...pending };
 
   if (updates.length > 0) {
+    // Student replied → celebrate with the most recently-pending task + remaining count.
+    const completedTask = pendingCopy[Object.keys(pendingCopy)[0]] || null;
+    const completedTitle = completedTask?.title || (tasks.length ? tasks[0].title : 'المهمة');
     const rim = Math.max(0, tasks.length - doneIds.length);
-    await completion(env, chatId, rim, tasks.length);     // user replied → celebrate + باقي المهام
+    await completion(env, chatId, completedTitle, rim, tasks.length);
     pendingCopy = {};
   }
 
@@ -292,16 +298,14 @@ async function run(env) {
   for (const t of dueNow) {
     if (pendingCopy[t.id]) continue;
     pendingCopy[t.id] = { start: t.start, title: t.title, firstSent: Date.now(), idx: 0 };
-    const text = dueText(t.start, t.title);
+    const text = dueText(hhmm, t.title, null, t.start);
     const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     if (res.ok) reSent++;
   }
 
   for (const [id, t] of Object.entries(pendingCopy)) {
     if (!pending[id]) continue;
-    const idx = (pending[id].idx || 0) + 1;
-    pendingCopy[id].idx = idx;
-    const text = resendText(t.start, t.title, idx);
+    const text = resendText(hhmm, t.title, t.start);
     const res = await tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
     if (res.ok) reSent++;
   }

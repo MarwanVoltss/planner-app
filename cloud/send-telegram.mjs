@@ -125,6 +125,29 @@ const now = new Date();
 const { hhmm, dayKey } = cairoParts(now);
 const dayLabel = (DAYS.find((d) => d.key === dayKey) || {}).label || dayKey;
 
+// فارق الدقائق بين وقت المهمة والساعة دلوقتي (0 = في موعدها بالضبط، موجب = متأخر).
+function diffMinutes(startHHMM, nowHHMM) {
+  const [sh, sm] = startHHMM.split(':').map(Number);
+  const [nh, nm] = nowHHMM.split(':').map(Number);
+  return (nh * 60 + nm) - (sh * 60 + sm);
+}
+
+// صورة احتفالية متاحة في الريبو (تُرفق برسائل التهنئة).
+const PIN_IMAGES = ['https://marwanvoltss.github.io/planner-app/celebrate.png'];
+
+async function celebrate(botToken, chatId, text) {
+  for (const photo of PIN_IMAGES) {
+    try {
+      const res = await tg(botToken, 'sendPhoto', { chat_id: chatId, photo, caption: text, parse_mode: 'HTML' });
+      if (res && res.ok) return true;
+    } catch (e) { console.log('CELEBRATE-PHOTO-WARN: ' + e.message); }
+  }
+  try {
+    const res = await tg(botToken, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' });
+    return !!(res && res.ok);
+  } catch (_) { return false; }
+}
+
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
 const chatId = process.env.TELEGRAM_CHAT_ID;
 const saJson = process.env.GOOGLE_SERVICE_ACCOUNT;
@@ -182,7 +205,12 @@ async function main() {
   }
 
   if (updates.length > 0) {
-    // Student replied → clear all pending so we stop repeating.
+    // Student replied → celebrate, then clear all pending so we stop repeating.
+    const completedTask = pending[Object.keys(pending)[0]] || null;
+    const completedTitle = completedTask?.title || (tasks.length ? tasks[0].title : 'المهمة');
+    const remainingCount = Math.max(0, tasks.length - 1);
+    const cText = `<b>🎉 عاش جداً يا وحش!</b>\n\nتم رصد الرد وتسجيل إتمام مهمة <b>${completedTitle}</b> بنجاح.\n\nباقي عندك <b>${remainingCount}</b> ${remainingCount === 1 ? 'مهمة' : 'مهام'} نقفل بيه يومنا، كمل طاقة وبطل كسل! 💪`;
+    celebrate(botToken, chatId, cText);
     pending = {};
     await persistPending();
     console.log(`REPLIED: user sent ${updates.length} message(s) — cleared pending reminders.`);
@@ -196,8 +224,8 @@ async function main() {
   for (const t of dueNow) {
     if (pending[t.id]) continue; // already reminded for this task today
     pending[t.id] = { start: t.start, title: t.title, firstSent: Date.now() };
-    const tag = TAGS?.[t.tag]?.label;
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}` + (tag ? ` · ${tag}` : '') + `\n\n<i>رد على البوت بأي كلمة لإيقاف تذكير هذه المهمة.</i>`;
+    const tag = TAGS?.[t.tag]?.label || 'مهمة';
+    const text = `<b>⏰ حان الآن موعد المهمة!</b>\n\n<b>المهمة:</b> ${t.title}\n<b>التصنيف:</b> ${tag} | <b>الميعاد:</b> ${t.start}\n\nيلا بينا ابدأ فيها حالا، ورد عليا بأي كلمة عشان أعرف إنك انتبهت! 🎯`;
     const res = await tg(botToken, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
     console.log(`-> ${t.id} ${res.ok ? 'sent' : 'FAIL ' + JSON.stringify(res).slice(0, 120)}`);
     sent++;
@@ -205,9 +233,9 @@ async function main() {
 
   // 6) Re-send pending tasks each minute (repeat until acked).
   let reSent = 0;
-  for (const [id, t] of Object.entries(pending)) {
-    const tag = TAGS?.[tasks.find((x) => x.id === id)?.tag]?.label;
-    const text = `<b>⏰ ${t.title}</b>\n${dayLabel} · ${t.start}` + (tag ? ` · ${tag}` : '') + `\n\n<i>لسه مستنية رجوعك! رد على البوت لإيقافه.</i>`;
+  for (const t of Object.values(pending)) {
+    const dm = diffMinutes(t.start, hhmm);
+    const text = `<b>⏳ تنبيه متأخر بـ ${dm} دقيقة!</b>\n\nالساعة دلوقتي <b>${hhmm}</b> ومهمة <b>${t.title}</b> (اللى كانت الساعة <b>${t.start}</b>) لسه متبدتش!\n\nبلاش تسويف يا بطل، ابدأ فيها ورد عليا حالا عشان أوقف التنبيهات. 🛑`;
     const res = await tg(botToken, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
     if (res.ok) reSent++;
   }
